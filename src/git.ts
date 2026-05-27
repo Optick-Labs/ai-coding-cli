@@ -18,6 +18,8 @@ const SNAPSHOT_IDENTITY = {
   GIT_COMMITTER_EMAIL: "submit@hellointerview.com",
 };
 
+const SUBMISSION_BRANCH = "refs/heads/hi-submission";
+
 export async function snapshotCommit(repoDir: string): Promise<string> {
   const indexFile = join(repoDir, ".git", `hi-submission-index-${process.pid}`);
   const env = { ...process.env, GIT_INDEX_FILE: indexFile, ...SNAPSHOT_IDENTITY };
@@ -36,8 +38,16 @@ export async function snapshotCommit(repoDir: string): Promise<string> {
   }
 }
 
-export async function bundle(repoDir: string, outPath: string, ref: string): Promise<void> {
-  await execa("git", ["bundle", "create", outPath, ref], { cwd: repoDir });
+export async function bundleSnapshot(repoDir: string, outPath: string, snapshotSha: string): Promise<void> {
+  const { stdout: originalHead } = await execa("git", ["symbolic-ref", "HEAD"], { cwd: repoDir });
+  await execa("git", ["update-ref", SUBMISSION_BRANCH, snapshotSha], { cwd: repoDir });
+  try {
+    await execa("git", ["symbolic-ref", "HEAD", SUBMISSION_BRANCH], { cwd: repoDir });
+    await execa("git", ["bundle", "create", outPath, "HEAD", SUBMISSION_BRANCH], { cwd: repoDir });
+  } finally {
+    await execa("git", ["symbolic-ref", "HEAD", originalHead.trim()], { cwd: repoDir });
+    await execa("git", ["update-ref", "-d", SUBMISSION_BRANCH], { cwd: repoDir });
+  }
 }
 
 export async function diffStat(repoDir: string, baselineSha: string, to = "HEAD"): Promise<string> {

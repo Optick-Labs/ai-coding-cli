@@ -3,7 +3,7 @@ import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import chalk from "chalk";
-import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession } from "../api.js";
+import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClock } from "../api.js";
 import { resolveSeed } from "../seeds.js";
 import { getRuntime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
@@ -50,20 +50,21 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
 
   const lang = assertLang(options.lang);
   const source = resolveSeed({ task: taskArg, lang, seedFlag: options.seed });
+
+  const { repoDir, dirName, baselineSha } = await bootstrap({ task: taskArg, lang, source });
+
   const startedAt = new Date();
   const deadline = new Date(startedAt.getTime() + DEADLINE_MINUTES * 60_000);
-
-  await bootstrap({
-    task: taskArg,
-    lang,
-    source,
+  await finalize({
+    repoDir,
+    dirName,
     session: {
       task: taskArg,
       lang,
       startedAt: startedAt.toISOString(),
       deadlineMinutes: DEADLINE_MINUTES,
       deadline: deadline.toISOString(),
-      baselineSha: "",
+      baselineSha,
     },
   });
 }
@@ -73,10 +74,6 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
   console.log(chalk.cyan("Resolving session from hellointerview.com..."));
   const remote = await fetchSession(base, token);
   const lang = assertLang(remote.language);
-  const deadlineMinutes = Math.max(
-    1,
-    Math.round((new Date(remote.deadline).getTime() - new Date(remote.startedAt).getTime()) / 60_000),
-  );
 
   const override = seedOverride?.trim();
   let source: string;
@@ -92,17 +89,25 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
   }
 
   try {
-    await bootstrap({
-      task: remote.task,
-      lang,
-      source,
+    const { repoDir, dirName, baselineSha } = await bootstrap({ task: remote.task, lang, source });
+
+    console.log(chalk.cyan("\nStarting session clock..."));
+    const clock = await startSessionClock(base, token);
+    const deadlineMinutes = Math.max(
+      1,
+      Math.round((new Date(clock.deadline).getTime() - new Date(clock.startedAt).getTime()) / 60_000),
+    );
+
+    await finalize({
+      repoDir,
+      dirName,
       session: {
         task: remote.task,
         lang,
-        startedAt: remote.startedAt,
+        startedAt: clock.startedAt,
         deadlineMinutes,
-        deadline: remote.deadline,
-        baselineSha: "",
+        deadline: clock.deadline,
+        baselineSha,
         token,
         apiBaseUrl: base,
       },
@@ -114,8 +119,12 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
   }
 }
 
-async function bootstrap(args: { task: string; lang: Lang; source: string; session: Session }): Promise<void> {
-  const { task, lang, source, session } = args;
+async function bootstrap(args: {
+  task: string;
+  lang: Lang;
+  source: string;
+}): Promise<{ repoDir: string; dirName: string; baselineSha: string }> {
+  const { task, lang, source } = args;
   const dirName = `${task}-${lang}`;
   const repoDir = resolve(process.cwd(), dirName);
 
@@ -150,7 +159,12 @@ async function bootstrap(args: { task: string; lang: Lang; source: string; sessi
     console.log(chalk.green("Baseline tests passed."));
   }
 
-  await writeSession(repoDir, { ...session, baselineSha });
+  return { repoDir, dirName, baselineSha };
+}
+
+async function finalize(args: { repoDir: string; dirName: string; session: Session }): Promise<void> {
+  const { repoDir, dirName, session } = args;
+  await writeSession(repoDir, session);
 
   const readme = ["README.md", "readme.md", "README"].find((f) => existsSync(join(repoDir, f)));
   const deadline = new Date(session.deadline);

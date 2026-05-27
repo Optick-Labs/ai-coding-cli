@@ -10,11 +10,18 @@ export function apiBaseUrl(override?: string): string {
 export interface RemoteSession {
   task: string;
   language: Lang;
+  startedAt: string | null;
+  deadline: string | null;
+  remainingSeconds: number | null;
+  status: string;
+  baselineSha: string | null;
+}
+
+export interface SessionClock {
   startedAt: string;
   deadline: string;
   remainingSeconds: number;
   status: string;
-  baselineSha: string | null;
 }
 
 export interface SubmitPayload {
@@ -49,6 +56,11 @@ async function request(base: string, path: string, token: string, init?: Request
 export async function fetchSession(base: string, token: string): Promise<RemoteSession> {
   const res = await request(base, "/api/byoe/session", token, { method: "GET" });
   return (await res.json()) as RemoteSession;
+}
+
+export async function startSessionClock(base: string, token: string): Promise<SessionClock> {
+  const res = await request(base, "/api/byoe/session/start", token, { method: "POST" });
+  return (await res.json()) as SessionClock;
 }
 
 export async function fetchSeedUrl(base: string, token: string): Promise<{ url: string }> {

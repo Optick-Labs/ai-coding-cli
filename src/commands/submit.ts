@@ -4,7 +4,7 @@ import chalk from "chalk";
 import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
 import { findSession, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
-import { diff, log, diffNameStatus, bundle, snapshotCommit } from "../git.js";
+import { diff, log, diffNameStatus, bundleSnapshot, snapshotCommit } from "../git.js";
 import { computeRemaining } from "../time.js";
 
 interface Summary {
@@ -22,7 +22,10 @@ function extractAddedTestFiles(nameStatus: string): string[] {
     .map((line) => line.trim())
     .filter((line) => line.startsWith("A"))
     .map((line) => line.split(/\s+/).slice(1).join(" "))
-    .filter((path) => /(^|\/)tests?(\/|$)/.test(path));
+    .filter((path) => {
+      const base = path.split("/").pop() ?? path;
+      return /(^|\/)tests?(\/|$)/.test(path) || /^test_.*\.py$|_test\.py$/.test(base);
+    });
 }
 
 export async function submitCommand(): Promise<void> {
@@ -41,7 +44,7 @@ export async function submitCommand(): Promise<void> {
   const addedTests = extractAddedTestFiles(nameStatus);
 
   const bundlePath = join(artifactDir, "submission.bundle");
-  await bundle(repoDir, bundlePath, snapshot);
+  await bundleSnapshot(repoDir, bundlePath, snapshot);
 
   await Promise.all([
     writeFile(join(artifactDir, "diff.patch"), diffText, "utf8"),

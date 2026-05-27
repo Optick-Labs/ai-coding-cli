@@ -11,7 +11,10 @@ export async function statusCommand(): Promise<void> {
   if (session.token && session.apiBaseUrl) {
     try {
       const remote = await fetchSession(session.apiBaseUrl, session.token);
-      remaining = labelFromSeconds(remote.remainingSeconds);
+      remaining =
+        remote.remainingSeconds === null
+          ? computeRemaining(session.deadline, session.startedAt, new Date())
+          : labelFromSeconds(remote.remainingSeconds);
     } catch {
       console.log(chalk.dim("(could not reach server; showing local time)"));
       remaining = computeRemaining(session.deadline, session.startedAt, new Date());
