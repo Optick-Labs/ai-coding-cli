@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type { Lang } from "./session.js";
 
 const DEFAULT_API = "https://www.hellointerview.com";
@@ -10,7 +10,6 @@ export function apiBaseUrl(override?: string): string {
 export interface RemoteSession {
   task: string;
   language: Lang;
-  seedRepoUrl: string;
   startedAt: string;
   deadline: string;
   remainingSeconds: number;
@@ -50,6 +49,21 @@ async function request(base: string, path: string, token: string, init?: Request
 export async function fetchSession(base: string, token: string): Promise<RemoteSession> {
   const res = await request(base, "/api/byoe/session", token, { method: "GET" });
   return (await res.json()) as RemoteSession;
+}
+
+export async function fetchSeedUrl(base: string, token: string): Promise<{ url: string }> {
+  const res = await request(base, "/api/byoe/seed", token, { method: "POST" });
+  return (await res.json()) as { url: string };
+}
+
+export async function downloadBundle(url: string, destPath: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`seed download failed (${res.status})${text ? `: ${text}` : ""}`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  await writeFile(destPath, buffer);
 }
 
 export async function fetchArtifactUrl(base: string, token: string): Promise<{ url: string; key: string }> {

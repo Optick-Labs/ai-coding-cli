@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import chalk from "chalk";
-import { apiBaseUrl, fetchSession } from "../api.js";
+import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession } from "../api.js";
 import { resolveSeed } from "../seeds.js";
 import { getRuntime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
@@ -19,21 +20,6 @@ export interface StartOptions {
 function assertLang(lang: string): Lang {
   if (lang === "python" || lang === "java") return lang;
   throw new Error(`language must be "python" or "java" (got "${lang}").`);
-}
-
-function assertSafeRemoteSeed(url: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error(`Server returned an unusable seed URL (${url}). Aborting.`);
-  }
-  if (parsed.protocol !== "https:") {
-    throw new Error(
-      `Refusing to clone a non-https seed URL from the server (${url}). ` +
-        "Use --seed to point at a trusted source if you're working offline.",
-    );
-  }
 }
 
 async function ensureHiIgnored(repoDir: string): Promise<void> {
@@ -94,28 +80,38 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
 
   const override = seedOverride?.trim();
   let source: string;
+  let tempSeedDir: string | undefined;
   if (override && override.length > 0) {
     source = override;
   } else {
-    assertSafeRemoteSeed(remote.seedRepoUrl);
-    source = remote.seedRepoUrl;
+    console.log(chalk.cyan("Downloading seed..."));
+    const { url } = await fetchSeedUrl(base, token);
+    tempSeedDir = await mkdtemp(join(tmpdir(), "hi-byoe-seed-"));
+    source = join(tempSeedDir, "baseline.bundle");
+    await downloadBundle(url, source);
   }
 
-  await bootstrap({
-    task: remote.task,
-    lang,
-    source,
-    session: {
+  try {
+    await bootstrap({
       task: remote.task,
       lang,
-      startedAt: remote.startedAt,
-      deadlineMinutes,
-      deadline: remote.deadline,
-      baselineSha: "",
-      token,
-      apiBaseUrl: base,
-    },
-  });
+      source,
+      session: {
+        task: remote.task,
+        lang,
+        startedAt: remote.startedAt,
+        deadlineMinutes,
+        deadline: remote.deadline,
+        baselineSha: "",
+        token,
+        apiBaseUrl: base,
+      },
+    });
+  } finally {
+    if (tempSeedDir) {
+      await rm(tempSeedDir, { recursive: true, force: true });
+    }
+  }
 }
 
 async function bootstrap(args: { task: string; lang: Lang; source: string; session: Session }): Promise<void> {

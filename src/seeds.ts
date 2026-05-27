@@ -1,12 +1,5 @@
 import type { Lang } from "./session.js";
 
-const REGISTRY: Record<string, Partial<Record<Lang, string>>> = {
-  booking: {
-    python: "https://github.com/Optick-Labs/byoe-booking-python",
-    java: "https://github.com/Optick-Labs/byoe-booking-java",
-  },
-};
-
 export interface ResolveSeedOptions {
   task: string;
   lang: Lang;
@@ -24,13 +17,9 @@ export function resolveSeed({ task, lang, seedFlag }: ResolveSeedOptions): strin
     return fromEnv.trim();
   }
 
-  const fromRegistry = REGISTRY[task]?.[lang];
-  if (fromRegistry) {
-    return fromRegistry;
-  }
-
   throw new Error(
-    `No seed repo for task "${task}" + lang "${lang}". ` +
-      `Pass --seed <url-or-path>, set ${envKey}, or add it to the registry.`,
+    `No seed source for task "${task}" + lang "${lang}" in offline mode. ` +
+      `Pass --seed <url-or-path> or set ${envKey}. ` +
+      `(Online mode with --token fetches the seed automatically.)`,
   );
 }
