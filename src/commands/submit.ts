@@ -1,0 +1,106 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import chalk from "chalk";
+import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
+import { findSession, updateSession } from "../session.js";
+import { getRuntime } from "../runtimes/index.js";
+import { diff, log, diffNameStatus, bundle, commitCount } from "../git.js";
+import { computeRemaining } from "../time.js";
+
+interface Summary {
+  task: string;
+  lang: string;
+  submittedAt: string;
+  overTime: boolean;
+  elapsedMinutes: number;
+  testsPassed: boolean;
+}
+
+function extractAddedTestFiles(nameStatus: string): string[] {
+  return nameStatus
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("A"))
+    .map((line) => line.split(/\s+/).slice(1).join(" "))
+    .filter((path) => /(^|\/)tests?(\/|$)/.test(path));
+}
+
+export async function submitCommand(): Promise<void> {
+  const { session, hiDir, repoDir } = await findSession(process.cwd());
+  const artifactDir = join(hiDir, "artifact");
+  await mkdir(artifactDir, { recursive: true });
+
+  const [diffText, logText, nameStatus, commits] = await Promise.all([
+    diff(repoDir, session.baselineSha),
+    log(repoDir, session.baselineSha),
+    diffNameStatus(repoDir, session.baselineSha),
+    commitCount(repoDir, session.baselineSha),
+  ]);
+
+  const addedTests = extractAddedTestFiles(nameStatus);
+
+  const bundlePath = join(artifactDir, "submission.bundle");
+  await bundle(repoDir, bundlePath);
+
+  await Promise.all([
+    writeFile(join(artifactDir, "diff.patch"), diffText, "utf8"),
+    writeFile(join(artifactDir, "git.log"), logText, "utf8"),
+    writeFile(join(artifactDir, "added-tests.txt"), addedTests.join("\n") + "\n", "utf8"),
+  ]);
+
+  if (commits === 0) {
+    console.log(
+      chalk.yellow("Warning: no commits since baseline — submit captures committed work only. Commit your changes first."),
+    );
+  }
+
+  console.log(chalk.cyan("Re-running tests..."));
+  const runtime = getRuntime(session.lang);
+  const testResult = await runtime.runTests(repoDir);
+  await writeFile(join(artifactDir, "test-result.txt"), testResult.output, "utf8");
+
+  const submittedAtDate = new Date();
+  const local = computeRemaining(session.deadline, session.startedAt, submittedAtDate);
+
+  let overTime = local.overTime;
+  let serverResult: SubmitResult | undefined;
+
+  if (session.token && session.apiBaseUrl) {
+    console.log(chalk.cyan("Uploading submission..."));
+    const { url, key } = await fetchArtifactUrl(session.apiBaseUrl, session.token);
+    await uploadBundle(url, bundlePath);
+    serverResult = await postSubmit(session.apiBaseUrl, session.token, {
+      baselineSha: session.baselineSha,
+      artifactKey: key,
+      testsPassedLocal: testResult.passed,
+      metadata: { elapsedMinutes: local.elapsedMinutes, addedTests },
+    });
+    overTime = serverResult.overTime;
+  }
+
+  const summary: Summary = {
+    task: session.task,
+    lang: session.lang,
+    submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString(),
+    overTime,
+    elapsedMinutes: local.elapsedMinutes,
+    testsPassed: testResult.passed,
+  };
+  await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
+  await updateSession(repoDir, { submittedAt: summary.submittedAt });
+
+  console.log(chalk.bold.green("\nSubmission complete."));
+  console.log(`Task:        ${session.task} (${session.lang})`);
+  console.log(`Elapsed:     ${local.elapsedMinutes} min`);
+  console.log(overTime ? chalk.red("Over time:   yes") : chalk.green("Over time:   no"));
+  console.log(
+    testResult.passed ? chalk.green("Tests:       passed (local, unverified)") : chalk.red("Tests:       FAILED (local)"),
+  );
+  console.log(`Added tests: ${addedTests.length > 0 ? addedTests.join(", ") : "(none)"}`);
+  console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
+  if (serverResult) {
+    console.log(chalk.dim(`Uploaded to control plane (status: ${serverResult.status}).`));
+  } else {
+    console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
+  }
+}
