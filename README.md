@@ -38,12 +38,12 @@ npx hello-interview submit
 
 ## Publishing (maintainers)
 
-This package is published to the public npm registry as `hello-interview`. Only `dist/` ships (see `files`), and the three runtime deps are bundled into `dist/cli.js`, so consumers install nothing extra.
+This package is published to the public npm registry as `hello-interview`. Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
 
 1. Bump the version in `package.json` (and the `--version` string in `src/cli.ts` if you keep them in sync). npm publishes are effectively permanent and `npx hello-interview` always grabs the latest, so treat each publish as a release.
 2. Build the bundle:
    ```
-   yarn workspace hello-interview build
+   cd packages/cli && yarn install --immutable && yarn build
    ```
 3. Inspect exactly what will ship — confirm it's only `README.md`, `dist/cli.js`, `package.json`:
    ```
