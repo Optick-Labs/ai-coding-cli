@@ -5,7 +5,7 @@ import { onPath, resolveBin, runTestsCapture, streamInstall, streamRun } from ".
 async function ensureMise(): Promise<void> {
   if (await onPath("mise")) return;
   console.log(chalk.yellow("mise not found. Installing mise..."));
-  await streamInstall("https://mise.run", "curl");
+  await streamInstall("https://mise.run");
   if (!(await onPath("mise"))) {
     throw new Error("mise install completed but mise is still not on PATH (~/.local/bin).");
   }

@@ -4,7 +4,7 @@ import chalk from "chalk";
 import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
 import { findSession, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
-import { diff, log, diffNameStatus, bundle, commitCount } from "../git.js";
+import { diff, log, diffNameStatus, bundle, snapshotCommit } from "../git.js";
 import { computeRemaining } from "../time.js";
 
 interface Summary {
@@ -30,28 +30,31 @@ export async function submitCommand(): Promise<void> {
   const artifactDir = join(hiDir, "artifact");
   await mkdir(artifactDir, { recursive: true });
 
-  const [diffText, logText, nameStatus, commits] = await Promise.all([
-    diff(repoDir, session.baselineSha),
+  const snapshot = await snapshotCommit(repoDir);
+
+  const [diffText, logText, nameStatus] = await Promise.all([
+    diff(repoDir, session.baselineSha, snapshot),
     log(repoDir, session.baselineSha),
-    diffNameStatus(repoDir, session.baselineSha),
-    commitCount(repoDir, session.baselineSha),
+    diffNameStatus(repoDir, session.baselineSha, snapshot),
   ]);
 
   const addedTests = extractAddedTestFiles(nameStatus);
 
   const bundlePath = join(artifactDir, "submission.bundle");
-  await bundle(repoDir, bundlePath);
+  await bundle(repoDir, bundlePath, snapshot);
 
   await Promise.all([
     writeFile(join(artifactDir, "diff.patch"), diffText, "utf8"),
     writeFile(join(artifactDir, "git.log"), logText, "utf8"),
-    writeFile(join(artifactDir, "added-tests.txt"), addedTests.join("\n") + "\n", "utf8"),
+    writeFile(
+      join(artifactDir, "added-tests.txt"),
+      addedTests.length > 0 ? addedTests.join("\n") + "\n" : "",
+      "utf8",
+    ),
   ]);
 
-  if (commits === 0) {
-    console.log(
-      chalk.yellow("Warning: no commits since baseline — submit captures committed work only. Commit your changes first."),
-    );
+  if (nameStatus.trim().length === 0) {
+    console.log(chalk.yellow("Warning: no changes since baseline — submitting an unchanged repo."));
   }
 
   console.log(chalk.cyan("Re-running tests..."));
@@ -67,11 +70,10 @@ export async function submitCommand(): Promise<void> {
 
   if (session.token && session.apiBaseUrl) {
     console.log(chalk.cyan("Uploading submission..."));
-    const { url, key } = await fetchArtifactUrl(session.apiBaseUrl, session.token);
+    const { url } = await fetchArtifactUrl(session.apiBaseUrl, session.token);
     await uploadBundle(url, bundlePath);
     serverResult = await postSubmit(session.apiBaseUrl, session.token, {
       baselineSha: session.baselineSha,
-      artifactKey: key,
       testsPassedLocal: testResult.passed,
       metadata: { elapsedMinutes: local.elapsedMinutes, addedTests },
     });

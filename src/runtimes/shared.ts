@@ -45,8 +45,7 @@ export async function streamRun(
   });
 }
 
-export async function streamInstall(scriptUrl: string, fetcher: "curl"): Promise<void> {
-  void fetcher;
+export async function streamInstall(scriptUrl: string): Promise<void> {
   await execa("sh", ["-c", `curl -LsSf ${scriptUrl} | sh`], {
     stdio: "inherit",
     env: envWithLocalBin(),

@@ -2,8 +2,8 @@ import type { Lang } from "./session.js";
 
 const REGISTRY: Record<string, Partial<Record<Lang, string>>> = {
   booking: {
-    python: "https://github.com/optick/byoe-booking-python",
-    java: "https://github.com/optick/byoe-booking-java",
+    python: "https://github.com/Optick-Labs/byoe-booking-python",
+    java: "https://github.com/Optick-Labs/byoe-booking-java",
   },
 };
 

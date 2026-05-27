@@ -20,7 +20,6 @@ export interface RemoteSession {
 
 export interface SubmitPayload {
   baselineSha: string;
-  artifactKey?: string;
   testsPassedLocal: boolean;
   metadata?: Record<string, unknown>;
 }

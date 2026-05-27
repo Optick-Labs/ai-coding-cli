@@ -5,7 +5,7 @@ import { onPath, resolveBin, runTestsCapture, streamInstall, streamRun } from ".
 async function ensureUv(): Promise<void> {
   if (await onPath("uv")) return;
   console.log(chalk.yellow("uv not found. Installing uv..."));
-  await streamInstall("https://astral.sh/uv/install.sh", "curl");
+  await streamInstall("https://astral.sh/uv/install.sh");
   if (!(await onPath("uv"))) {
     throw new Error("uv install completed but uv is still not on PATH (~/.local/bin).");
   }

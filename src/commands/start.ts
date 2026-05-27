@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { appendFile, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import chalk from "chalk";
 import { apiBaseUrl, fetchSession } from "../api.js";
@@ -18,6 +19,34 @@ export interface StartOptions {
 function assertLang(lang: string): Lang {
   if (lang === "python" || lang === "java") return lang;
   throw new Error(`language must be "python" or "java" (got "${lang}").`);
+}
+
+function assertSafeRemoteSeed(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Server returned an unusable seed URL (${url}). Aborting.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(
+      `Refusing to clone a non-https seed URL from the server (${url}). ` +
+        "Use --seed to point at a trusted source if you're working offline.",
+    );
+  }
+}
+
+async function ensureHiIgnored(repoDir: string): Promise<void> {
+  const gitignorePath = join(repoDir, ".gitignore");
+  let contents = "";
+  if (existsSync(gitignorePath)) {
+    contents = await readFile(gitignorePath, "utf8");
+    if (contents.split(/\r?\n/).some((line) => line.trim() === ".hi" || line.trim() === ".hi/")) {
+      return;
+    }
+  }
+  const prefix = contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
+  await appendFile(gitignorePath, `${prefix}.hi/\n`, "utf8");
 }
 
 export async function startCommand(taskArg: string | undefined, options: StartOptions): Promise<void> {
@@ -63,10 +92,19 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
     Math.round((new Date(remote.deadline).getTime() - new Date(remote.startedAt).getTime()) / 60_000),
   );
 
+  const override = seedOverride?.trim();
+  let source: string;
+  if (override && override.length > 0) {
+    source = override;
+  } else {
+    assertSafeRemoteSeed(remote.seedRepoUrl);
+    source = remote.seedRepoUrl;
+  }
+
   await bootstrap({
     task: remote.task,
     lang,
-    source: seedOverride && seedOverride.trim().length > 0 ? seedOverride.trim() : remote.seedRepoUrl,
+    source,
     session: {
       task: remote.task,
       lang,
@@ -96,6 +134,8 @@ async function bootstrap(args: { task: string; lang: Lang; source: string; sessi
 
   const baselineSha = await headSha(repoDir);
   console.log(chalk.dim(`Baseline commit: ${baselineSha}`));
+
+  await ensureHiIgnored(repoDir);
 
   const runtime = getRuntime(lang);
   console.log(chalk.cyan("\nProvisioning runtime..."));
