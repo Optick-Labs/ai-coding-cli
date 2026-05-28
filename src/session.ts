@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 
-export type Lang = "python" | "java" | "typescript" | "go" | "csharp";
+export const LANGS = ["python", "java", "typescript", "go", "csharp"] as const;
+export type Lang = (typeof LANGS)[number];
 
 export interface Session {
   task: string;
