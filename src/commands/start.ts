@@ -17,9 +17,11 @@ export interface StartOptions {
   seed?: string;
 }
 
+const SUPPORTED_LANGS: Lang[] = ["python", "java", "typescript", "go", "csharp"];
+
 function assertLang(lang: string): Lang {
-  if (lang === "python" || lang === "java") return lang;
-  throw new Error(`language must be "python" or "java" (got "${lang}").`);
+  if ((SUPPORTED_LANGS as string[]).includes(lang)) return lang as Lang;
+  throw new Error(`language must be one of ${SUPPORTED_LANGS.join(", ")} (got "${lang}").`);
 }
 
 async function ensureHiIgnored(repoDir: string): Promise<void> {

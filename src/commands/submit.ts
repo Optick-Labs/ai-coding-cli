@@ -24,7 +24,13 @@ function extractAddedTestFiles(nameStatus: string): string[] {
     .map((line) => line.split(/\s+/).slice(1).join(" "))
     .filter((path) => {
       const base = path.split("/").pop() ?? path;
-      return /(^|\/)tests?(\/|$)/.test(path) || /^test_.*\.py$|_test\.py$/.test(base);
+      return (
+        /(^|\/)tests?(\/|$)/.test(path) ||
+        /^test_.*\.py$|_test\.py$/.test(base) ||
+        /\.(test|spec)\.(t|j)s$/.test(base) ||
+        /_test\.go$/.test(base) ||
+        /Tests?\.cs$/.test(base)
+      );
     });
 }
 

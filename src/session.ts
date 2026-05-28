@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 
-export type Lang = "python" | "java";
+export type Lang = "python" | "java" | "typescript" | "go" | "csharp";
 
 export interface Session {
   task: string;
