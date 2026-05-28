@@ -78,6 +78,7 @@ export async function submitCommand(): Promise<void> {
     serverResult = await postSubmit(session.apiBaseUrl, session.token, {
       baselineSha: session.baselineSha,
       testsPassedLocal: testResult.passed,
+      diff: diffText,
       metadata: { elapsedMinutes: local.elapsedMinutes, addedTests },
     });
     overTime = serverResult.overTime;

@@ -27,6 +27,7 @@ export interface SessionClock {
 export interface SubmitPayload {
   baselineSha: string;
   testsPassedLocal: boolean;
+  diff?: string;
   metadata?: Record<string, unknown>;
 }
 
