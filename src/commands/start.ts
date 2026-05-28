@@ -9,7 +9,7 @@ import { getRuntime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
 import { writeSession, LANGS, type Lang, type Session } from "../session.js";
 
-const DEADLINE_MINUTES = 90;
+const DEADLINE_MINUTES = 60;
 
 export interface StartOptions {
   token?: string;
