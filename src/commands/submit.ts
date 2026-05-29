@@ -112,6 +112,9 @@ export async function submitCommand(): Promise<void> {
   console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
   if (serverResult) {
     console.log(chalk.dim(`Uploaded to control plane (status: ${serverResult.status}).`));
+    if (serverResult.debriefUrl) {
+      console.log(`\n${chalk.bold("Next:")} record your debrief at ${chalk.cyan(serverResult.debriefUrl)}`);
+    }
   } else {
     console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
   }
