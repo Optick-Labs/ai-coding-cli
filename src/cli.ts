@@ -17,7 +17,7 @@ async function main(): Promise<void> {
     .description("Clone a seed repo, provision the runtime, and start a timed session")
     .argument("[task]", "task slug for offline mode (e.g. booking); omit when using --token")
     .option("--token <token>", "session token from hellointerview.com")
-    .option("--lang <lang>", "language: python | java (offline mode)")
+    .option("--lang <lang>", "language: python | java | typescript | go | csharp (offline mode)")
     .option("--seed <url-or-path>", "override seed repo source (offline mode)")
     .action(async (task: string | undefined, options: { token?: string; lang?: string; seed?: string }) => {
       await startCommand(task, options);

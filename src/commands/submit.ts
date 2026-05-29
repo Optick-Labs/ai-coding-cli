@@ -24,7 +24,13 @@ function extractAddedTestFiles(nameStatus: string): string[] {
     .map((line) => line.split(/\s+/).slice(1).join(" "))
     .filter((path) => {
       const base = path.split("/").pop() ?? path;
-      return /(^|\/)tests?(\/|$)/.test(path) || /^test_.*\.py$|_test\.py$/.test(base);
+      return (
+        /(^|\/)tests?(\/|$)/.test(path) ||
+        /^test_.*\.py$|_test\.py$/.test(base) ||
+        /\.(test|spec)\.(t|j)s$/.test(base) ||
+        /_test\.go$/.test(base) ||
+        /Tests?\.cs$/.test(base)
+      );
     });
 }
 
@@ -78,6 +84,7 @@ export async function submitCommand(): Promise<void> {
     serverResult = await postSubmit(session.apiBaseUrl, session.token, {
       baselineSha: session.baselineSha,
       testsPassedLocal: testResult.passed,
+      diff: diffText,
       metadata: { elapsedMinutes: local.elapsedMinutes, addedTests },
     });
     overTime = serverResult.overTime;
@@ -105,6 +112,9 @@ export async function submitCommand(): Promise<void> {
   console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
   if (serverResult) {
     console.log(chalk.dim(`Uploaded to control plane (status: ${serverResult.status}).`));
+    if (serverResult.debriefUrl) {
+      console.log(`\n${chalk.bold("Next:")} record your debrief at ${chalk.cyan(serverResult.debriefUrl)}`);
+    }
   } else {
     console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
   }

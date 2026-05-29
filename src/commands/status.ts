@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { fetchSession } from "../api.js";
 import { findSession } from "../session.js";
-import { diffStat } from "../git.js";
+import { diffStat, snapshotCommit } from "../git.js";
 import { computeRemaining, labelFromSeconds } from "../time.js";
 
 export async function statusCommand(): Promise<void> {
@@ -33,7 +33,10 @@ export async function statusCommand(): Promise<void> {
     console.log(chalk.dim(`Submitted at ${session.submittedAt}`));
   }
 
-  const stat = await diffStat(repoDir, session.baselineSha);
+  // Mirror what submit captures: full working tree (committed + staged + unstaged + untracked)
+  // so candidates see their actual in-progress work, not just committed changes.
+  const snapshot = await snapshotCommit(repoDir);
+  const stat = await diffStat(repoDir, session.baselineSha, snapshot);
   console.log(chalk.bold("\nChanges since baseline:"));
   console.log(stat.trim().length > 0 ? stat : chalk.dim("(no changes yet)"));
 }

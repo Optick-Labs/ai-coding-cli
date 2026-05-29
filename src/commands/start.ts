@@ -7,7 +7,7 @@ import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClo
 import { resolveSeed } from "../seeds.js";
 import { getRuntime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
-import { writeSession, type Lang, type Session } from "../session.js";
+import { writeSession, LANGS, type Lang, type Session } from "../session.js";
 
 const DEADLINE_MINUTES = 60;
 
@@ -18,8 +18,8 @@ export interface StartOptions {
 }
 
 function assertLang(lang: string): Lang {
-  if (lang === "python" || lang === "java") return lang;
-  throw new Error(`language must be "python" or "java" (got "${lang}").`);
+  if ((LANGS as readonly string[]).includes(lang)) return lang as Lang;
+  throw new Error(`language must be one of ${LANGS.join(", ")} (got "${lang}").`);
 }
 
 async function ensureHiIgnored(repoDir: string): Promise<void> {
