@@ -37,6 +37,7 @@ export interface SubmitResult {
   overTime: boolean;
   testsPassedLocal: boolean | null;
   debriefUrl?: string;
+  cockpitUrl?: string;
 }
 
 async function request(base: string, path: string, token: string, init?: RequestInit): Promise<Response> {
