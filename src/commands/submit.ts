@@ -1,11 +1,31 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import chalk from "chalk";
 import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
-import { findSession, updateSession } from "../session.js";
+import { findSession, recorderPidPath, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
 import { diff, log, diffNameStatus, bundleSnapshot, snapshotCommit } from "../git.js";
 import { computeRemaining } from "../time.js";
+
+// Stop the background recorder before we snapshot so it can't run git concurrently with the submit.
+// Best-effort: a missing or dead recorder is the normal case for offline/already-finished sessions.
+async function stopRecorder(hiDir: string): Promise<void> {
+  const pidPath = recorderPidPath(hiDir);
+  if (!existsSync(pidPath)) return;
+  try {
+    const pid = Number.parseInt((await readFile(pidPath, "utf8")).trim(), 10);
+    if (Number.isInteger(pid)) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // Already gone — nothing to stop.
+      }
+    }
+  } finally {
+    await rm(pidPath, { force: true });
+  }
+}
 
 interface Summary {
   task: string;
@@ -38,6 +58,8 @@ export async function submitCommand(): Promise<void> {
   const { session, hiDir, repoDir } = await findSession(process.cwd());
   const artifactDir = join(hiDir, "artifact");
   await mkdir(artifactDir, { recursive: true });
+
+  await stopRecorder(hiDir);
 
   const snapshot = await snapshotCommit(repoDir);
 

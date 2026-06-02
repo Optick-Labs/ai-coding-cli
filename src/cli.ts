@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { recordCommand } from "./commands/record.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { submitCommand } from "./commands/submit.js";
@@ -35,6 +36,13 @@ async function main(): Promise<void> {
     .description("Bundle the diff, re-run tests, and finalize the session")
     .action(async () => {
       await submitCommand();
+    });
+
+  // Internal: the background timeline recorder, spawned detached by `start`. Not for direct use.
+  program
+    .command("__record", { hidden: true })
+    .action(async () => {
+      await recordCommand();
     });
 
   await program.parseAsync(process.argv);

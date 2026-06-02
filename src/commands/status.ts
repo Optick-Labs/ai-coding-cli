@@ -1,11 +1,34 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import chalk from "chalk";
 import { fetchSession } from "../api.js";
-import { findSession } from "../session.js";
+import { findSession, recorderPidPath, timelineLogPath } from "../session.js";
 import { diffStat, snapshotCommit } from "../git.js";
 import { computeRemaining, labelFromSeconds } from "../time.js";
 
+async function recorderStatus(hiDir: string): Promise<{ alive: boolean; ticks: number }> {
+  const pidPath = recorderPidPath(hiDir);
+  let alive = false;
+  if (existsSync(pidPath)) {
+    try {
+      const pid = Number.parseInt((await readFile(pidPath, "utf8")).trim(), 10);
+      process.kill(pid, 0);
+      alive = true;
+    } catch {
+      alive = false;
+    }
+  }
+  let ticks = 0;
+  const logPath = timelineLogPath(hiDir);
+  if (existsSync(logPath)) {
+    const raw = await readFile(logPath, "utf8");
+    ticks = raw.split("\n").filter((line) => line.trim().length > 0).length;
+  }
+  return { alive, ticks };
+}
+
 export async function statusCommand(): Promise<void> {
-  const { session, repoDir } = await findSession(process.cwd());
+  const { session, hiDir, repoDir } = await findSession(process.cwd());
 
   let remaining: { overTime: boolean; label: string };
   if (session.token && session.apiBaseUrl) {
@@ -32,6 +55,13 @@ export async function statusCommand(): Promise<void> {
   if (session.submittedAt) {
     console.log(chalk.dim(`Submitted at ${session.submittedAt}`));
   }
+
+  const recorder = await recorderStatus(hiDir);
+  console.log(
+    chalk.dim(
+      `Recorder: ${recorder.alive ? "running" : "stopped"} (${recorder.ticks} snapshot${recorder.ticks === 1 ? "" : "s"})`,
+    ),
+  );
 
   // Mirror what submit captures: full working tree (committed + staged + unstaged + untracked)
   // so candidates see their actual in-progress work, not just committed changes.

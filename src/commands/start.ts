@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
@@ -7,7 +8,7 @@ import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClo
 import { resolveSeed } from "../seeds.js";
 import { getRuntime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
-import { writeSession, LANGS, type Lang, type Session } from "../session.js";
+import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
 
 const DEADLINE_MINUTES = 60;
 
@@ -167,9 +168,42 @@ const NEXT_STEPS: Record<Lang, { test: string; run: string; port: number }> = {
   java: { test: "./mvnw test", run: "./mvnw spring-boot:run", port: 5000 },
 };
 
+function recorderAlreadyRunning(repoDir: string): boolean {
+  const pidPath = recorderPidPath(join(repoDir, ".hi"));
+  if (!existsSync(pidPath)) return false;
+  try {
+    const pid = Number.parseInt(readFileSync(pidPath, "utf8").trim(), 10);
+    if (!Number.isInteger(pid)) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Spawn the background timeline recorder, detached from this process so it keeps snapshotting after
+// `start` returns control to the shell. Entirely best-effort: a session is fully usable without it.
+function spawnRecorder(repoDir: string): boolean {
+  if (recorderAlreadyRunning(repoDir)) return true;
+  const cliEntry = process.argv[1];
+  if (!cliEntry) return false;
+  try {
+    const child = spawn(process.execPath, [cliEntry, "__record"], {
+      cwd: repoDir,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function finalize(args: { repoDir: string; dirName: string; session: Session }): Promise<void> {
   const { repoDir, dirName, session } = args;
   await writeSession(repoDir, session);
+  const recording = spawnRecorder(repoDir);
 
   const readme = ["README.md", "readme.md", "README"].find((f) => existsSync(join(repoDir, f)));
   const deadline = new Date(session.deadline);
@@ -181,6 +215,11 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
     `README:   ${readme ? join(repoDir, readme) : "(no README found in seed)"}  ${chalk.dim("← read this first")}`,
   );
   console.log(`Budget:   ${session.deadlineMinutes} minutes (deadline ${deadline.toLocaleTimeString()})`);
+  if (recording) {
+    console.log(
+      chalk.dim("Progress: snapshotted every 2 min so your debrief can reference how you built it."),
+    );
+  }
 
   console.log(chalk.cyan("\nNext steps:"));
   console.log(`  ${chalk.bold(`cd ${dirName}`)}`);

@@ -41,6 +41,18 @@ export async function writeSession(repoDir: string, session: Session): Promise<s
   return path;
 }
 
+export function recorderPidPath(hiDir: string): string {
+  return join(hiDir, "recorder.pid");
+}
+
+export function timelineLogPath(hiDir: string): string {
+  return join(hiDir, "timeline.jsonl");
+}
+
+export function recorderLogPath(hiDir: string): string {
+  return join(hiDir, "recorder.log");
+}
+
 export async function findSession(startDir: string): Promise<FoundSession> {
   let current = startDir;
   const { root } = parse(current);
