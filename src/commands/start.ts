@@ -193,6 +193,9 @@ function spawnRecorder(repoDir: string): boolean {
       detached: true,
       stdio: "ignore",
     });
+    // spawn reports failures (ENOENT, EACCES) via an async error event; an unhandled one would
+    // throw and crash start, so swallow it to keep the recorder strictly best-effort.
+    child.on("error", () => {});
     child.unref();
     return true;
   } catch {
