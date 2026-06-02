@@ -16,7 +16,7 @@ function recordIntervalMs(): number {
 }
 // Keep recording through overtime work, but give up well after the deadline so an abandoned session
 // can't leave a recorder running forever.
-const OVERTIME_GRACE_MS = 30 * 60_000;
+const OVERTIME_GRACE_MS = 2 * 60 * 60_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
