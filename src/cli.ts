@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { chatCommand } from "./commands/chat.js";
 import { recordCommand } from "./commands/record.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
@@ -36,6 +37,13 @@ async function main(): Promise<void> {
     .description("Bundle the diff, re-run tests, and finalize the session")
     .action(async () => {
       await submitCommand();
+    });
+
+  program
+    .command("chat")
+    .description("Attach AI chat logs (Claude Code, Codex) from this session")
+    .action(async () => {
+      await chatCommand();
     });
 
   // Internal: the background timeline recorder, spawned detached by `start`. Not for direct use.

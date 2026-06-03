@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import chalk from "chalk";
 import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
+import { captureChats } from "./chat.js";
 import { findSession, recorderPidPath, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
 import { diff, log, diffNameStatus, bundleSnapshot, snapshotCommit } from "../git.js";
@@ -132,6 +133,15 @@ export async function submitCommand(): Promise<void> {
   );
   console.log(`Added tests: ${addedTests.length > 0 ? addedTests.join(", ") : "(none)"}`);
   console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
+
+  // Attach AI chats after the code is safely uploaded — never let a capture hiccup fail the submit.
+  try {
+    await captureChats(session, repoDir);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(chalk.dim(`Chat capture skipped (${message}).`));
+  }
+
   if (serverResult) {
     console.log(chalk.dim(`Uploaded to control plane (status: ${serverResult.status}).`));
     const nextUrl = serverResult.cockpitUrl ?? serverResult.debriefUrl;

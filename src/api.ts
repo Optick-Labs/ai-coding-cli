@@ -86,6 +86,52 @@ export async function fetchArtifactUrl(base: string, token: string): Promise<{ u
   return (await res.json()) as { url: string; key: string };
 }
 
+export async function fetchChatUploadUrl(
+  base: string,
+  token: string,
+  captureId: string,
+): Promise<{ url: string; key: string }> {
+  const res = await request(base, "/api/byoe/chat-url", token, {
+    method: "POST",
+    body: JSON.stringify({ captureId }),
+  });
+  return (await res.json()) as { url: string; key: string };
+}
+
+export interface ChatCapturePayload {
+  provider: "CLAUDE" | "CODEX";
+  title: string | null;
+  key: string;
+  byteSize: number;
+  messageCount: number | null;
+  sourceMtime: string | null;
+}
+
+export async function postChatCapture(
+  base: string,
+  token: string,
+  captures: ChatCapturePayload[],
+): Promise<{ status: string; count: number }> {
+  const res = await request(base, "/api/byoe/chat-capture", token, {
+    method: "POST",
+    body: JSON.stringify({ captures }),
+  });
+  return (await res.json()) as { status: string; count: number };
+}
+
+export async function uploadChatRaw(url: string, filePath: string): Promise<void> {
+  const body = await readFile(filePath);
+  const res = await fetch(url, {
+    method: "PUT",
+    body,
+    headers: { "Content-Type": "application/x-ndjson" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`chat upload failed (${res.status})${text ? `: ${text}` : ""}`);
+  }
+}
+
 export async function postSubmit(base: string, token: string, payload: SubmitPayload): Promise<SubmitResult> {
   const res = await request(base, "/api/byoe/submit", token, {
     method: "POST",
