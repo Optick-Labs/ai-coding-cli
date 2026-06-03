@@ -35,7 +35,8 @@ function isPreamble(text: string): boolean {
   return t.startsWith("<local-command-caveat>") || t.startsWith("<command-name>");
 }
 
-function inspect(raw: string): { title: string | null; messageCount: number } {
+function inspect(raw: string): { cwd: string | null; title: string | null; messageCount: number } {
+  let cwd: string | null = null;
   let title: string | null = null;
   let firstUser: string | null = null;
   let messageCount = 0;
@@ -48,6 +49,7 @@ function inspect(raw: string): { title: string | null; messageCount: number } {
     } catch {
       continue;
     }
+    if (!cwd && typeof obj.cwd === "string") cwd = obj.cwd;
     if (obj.type === "ai-title" && !title) {
       title = String((obj as { aiTitle?: string }).aiTitle ?? "") || null;
     }
@@ -62,7 +64,7 @@ function inspect(raw: string): { title: string | null; messageCount: number } {
   if (!title && firstUser) {
     title = firstUser.replace(/\s+/g, " ").trim().slice(0, 80);
   }
-  return { title, messageCount };
+  return { cwd, title, messageCount };
 }
 
 export const claudeReader: ChatReader = {
@@ -71,10 +73,12 @@ export const claudeReader: ChatReader = {
     const projectsRoot = join(claudeRoot(), "projects");
     if (!existsSync(projectsRoot)) return [];
 
-    // The candidate may have run Claude Code in the session repo or any subdirectory of it. Folder
-    // names are the cwd with non-alphanumerics replaced by "-", so a subdir shares the repo's prefix.
+    // Folder names are the cwd with every non-alphanumeric replaced by "-", which is lossy — a
+    // sibling like `ai-interview-old` collapses to the same prefix as `ai-interview`. So the prefix
+    // only narrows which folders to scan; the authoritative match is the verbatim cwd we read out of
+    // each JSONL below, the same ground-truth check the Codex reader uses.
     const repoPrefix = projectDirName(repoDir);
-    const projectDirs = (await readdir(projectsRoot)).filter(
+    const projectDirs = (await readdir(projectsRoot).catch(() => [])).filter(
       (name) => name === repoPrefix || name.startsWith(`${repoPrefix}-`),
     );
 
@@ -88,19 +92,35 @@ export const claudeReader: ChatReader = {
       )
     ).flat();
 
-    const withStats = await Promise.all(
-      files.map(async (path) => {
-        const s = await stat(path);
-        return { path, mtimeMs: s.mtimeMs, byteSize: s.size };
-      }),
-    );
+    // Isolate each stat so one bad file (rotated mid-scan, stray symlink, permission edge) drops out
+    // instead of rejecting the whole discovery.
+    const withStats = (
+      await Promise.all(
+        files.map(async (path) => {
+          try {
+            const s = await stat(path);
+            return { path, mtimeMs: s.mtimeMs, byteSize: s.size };
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((f): f is { path: string; mtimeMs: number; byteSize: number } => f !== null);
     withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
     const chats: DiscoveredChat[] = [];
     for (const file of withStats.slice(0, MAX_FILES_SCANNED)) {
-      const raw = await readFile(file.path, "utf8");
-      const { title, messageCount } = inspect(raw);
+      let raw: string;
+      try {
+        raw = await readFile(file.path, "utf8");
+      } catch {
+        continue;
+      }
+      const { cwd, title, messageCount } = inspect(raw);
       if (messageCount === 0) continue;
+      // The folder name is lossy; the cwd stamped in the log is ground truth. When present, require
+      // the repo itself or a subdirectory. Older logs without a cwd fall back to the folder match.
+      if (cwd && cwd !== repoDir && !cwd.startsWith(`${repoDir}/`)) continue;
       chats.push({
         provider: "CLAUDE",
         title,

@@ -60,7 +60,9 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
 
   if (eligible.length === 0) {
     console.log(
-      chalk.dim("No Claude Code or Codex chats found for this folder — skipping AI chat capture."),
+      chalk.dim(
+        "No Claude Code or Codex chats found for this folder. If you used another tool (Cursor, ChatGPT, etc.), you can paste your chat from the session page in your browser.",
+      ),
     );
     return;
   }
@@ -77,9 +79,18 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
     console.log(chalk.dim(`(${skippedForSize} chat(s) skipped — over ${humanBytes(MAX_CHAT_BYTES)}.)`));
   }
 
+  // Pre-check only chats from this session. A reused session directory (repeat practice, a stable
+  // dev checkout) surfaces older chats that share the same cwd — leave those unchecked so hitting
+  // enter on the defaults never ships a prior session's (or unrelated) AI logs to the grader.
+  const startedAtMs = new Date(session.startedAt).getTime();
+  const SESSION_GRACE_MS = 5 * 60_000;
   const selected = await checkbox<DiscoveredChat>({
     message: "Select chats to include:",
-    choices: eligible.map((chat) => ({ name: rowLabel(chat), value: chat, checked: true })),
+    choices: eligible.map((chat) => ({
+      name: rowLabel(chat),
+      value: chat,
+      checked: chat.mtimeMs >= startedAtMs - SESSION_GRACE_MS,
+    })),
     pageSize: 12,
   });
 
@@ -102,22 +113,40 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
 
   console.log(chalk.cyan("Uploading chats..."));
   const payloads: ChatCapturePayload[] = [];
+  let failed = 0;
+  // Isolate each upload so a single transient failure (an S3 blip on chat #3) doesn't discard the
+  // chats that already uploaded — we register whatever succeeded and report an honest "N of M".
   for (const chat of selected) {
-    const captureId = randomUUID();
-    const { url, key } = await fetchChatUploadUrl(session.apiBaseUrl, session.token, captureId);
-    await uploadChatRaw(url, chat.path);
-    payloads.push({
-      provider: chat.provider,
-      title: chat.title,
-      key,
-      byteSize: chat.byteSize,
-      messageCount: chat.messageCount,
-      sourceMtime: new Date(chat.mtimeMs).toISOString(),
-    });
+    try {
+      const captureId = randomUUID();
+      const { url, key } = await fetchChatUploadUrl(session.apiBaseUrl, session.token, captureId);
+      await uploadChatRaw(url, chat.path);
+      payloads.push({
+        provider: chat.provider,
+        title: chat.title,
+        key,
+        byteSize: chat.byteSize,
+        messageCount: chat.messageCount,
+        sourceMtime: new Date(chat.mtimeMs).toISOString(),
+      });
+    } catch {
+      failed++;
+    }
+  }
+
+  if (payloads.length === 0) {
+    console.log(chalk.yellow("Couldn't upload any chats — skipping AI chat capture."));
+    return;
   }
 
   await postChatCapture(session.apiBaseUrl, session.token, payloads);
-  console.log(chalk.green(`Attached ${payloads.length} chat(s).`));
+  if (failed > 0) {
+    console.log(
+      chalk.yellow(`Attached ${payloads.length} of ${selected.length} chat(s) — ${failed} failed to upload.`),
+    );
+  } else {
+    console.log(chalk.green(`Attached ${payloads.length} chat(s).`));
+  }
 }
 
 export async function chatCommand(): Promise<void> {

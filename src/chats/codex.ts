@@ -72,7 +72,7 @@ function inspect(raw: string): { cwd: string | null; title: string | null; messa
 }
 
 async function listRolloutFiles(root: string): Promise<string[]> {
-  const entries = await readdir(root, { recursive: true });
+  const entries = await readdir(root, { recursive: true }).catch(() => [] as string[]);
   return entries
     .map((rel) => join(root, rel))
     .filter((p) => basename(p).startsWith("rollout-") && p.endsWith(".jsonl"));
@@ -85,18 +85,31 @@ export const codexReader: ChatReader = {
     if (!existsSync(root)) return [];
 
     const files = await listRolloutFiles(root);
-    const withStats = await Promise.all(
-      files.map(async (path) => {
-        const s = await stat(path);
-        return { path, mtimeMs: s.mtimeMs, byteSize: s.size };
-      }),
-    );
+    // Isolate each stat so one bad file (rotated mid-scan, stray symlink, permission edge) drops out
+    // instead of rejecting the whole discovery.
+    const withStats = (
+      await Promise.all(
+        files.map(async (path) => {
+          try {
+            const s = await stat(path);
+            return { path, mtimeMs: s.mtimeMs, byteSize: s.size };
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((f): f is { path: string; mtimeMs: number; byteSize: number } => f !== null);
     withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
     const chats: DiscoveredChat[] = [];
     for (const file of withStats.slice(0, MAX_FILES_SCANNED)) {
       if (chats.length >= MAX_MATCHES) break;
-      const raw = await readFile(file.path, "utf8");
+      let raw: string;
+      try {
+        raw = await readFile(file.path, "utf8");
+      } catch {
+        continue;
+      }
       const { cwd, title, messageCount } = inspect(raw);
       // Match the session repo or any subdirectory the candidate may have run Codex in.
       const inRepo = cwd === repoDir || (cwd?.startsWith(`${repoDir}/`) ?? false);
