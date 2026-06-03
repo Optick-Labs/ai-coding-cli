@@ -37,12 +37,11 @@ export async function streamRun(
   command: string,
   args: string[],
   cwd: string,
-  envOverrides?: NodeJS.ProcessEnv,
 ): Promise<void> {
   await execa(command, args, {
     cwd,
     stdio: "inherit",
-    env: { ...envWithLocalBin(), ...envOverrides },
+    env: envWithLocalBin(),
   });
 }
 

@@ -6,7 +6,9 @@ import { findFreePort, waitForPort } from "../net.js";
 import { pingEvent } from "./events.js";
 
 const DEFAULT_PORT = 8080;
-const READY_TIMEOUT_MS = 10_000;
+// Generous so a cold JVM / dotnet build (Spring Boot, `dotnet run`) still binds before we give up —
+// a short window would silently miss the DEV_SERVER signal for the slower-starting runtimes.
+const READY_TIMEOUT_MS = 45_000;
 
 export interface DevOptions {
   port?: string;
