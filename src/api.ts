@@ -120,6 +120,25 @@ export async function postChatCapture(
   return (await res.json()) as { status: string; count: number };
 }
 
+export interface ByoeEventPayload {
+  type: "TEST_RUN" | "DEV_SERVER";
+  passed?: boolean;
+  exitCode?: number;
+  port?: number;
+  durationMs?: number;
+}
+
+// Reports a process event (a test run / dev-server start). Best-effort by design: a short timeout so a
+// hung server can't hang the CLI; callers swallow failures. Scoped timeout only — the shared `request`
+// helper stays untouched so seed downloads etc. keep their own behavior.
+export async function postByoeEvent(base: string, token: string, event: ByoeEventPayload): Promise<void> {
+  await request(base, "/api/byoe/event", token, {
+    method: "POST",
+    body: JSON.stringify(event),
+    signal: AbortSignal.timeout(2000),
+  });
+}
+
 export async function uploadChatRaw(url: string, filePath: string): Promise<void> {
   const body = await readFile(filePath);
   const res = await fetch(url, {

@@ -16,7 +16,10 @@ export async function ensureMise(): Promise<void> {
 // pin the toolchain, then deps/tests run through `mise exec` so the pinned runtime is
 // active regardless of the candidate's shell. Each language differs only in its install
 // and test commands.
-export function createMiseRuntime(lang: Lang, opts: { install?: string[]; test: string[] }): Runtime {
+export function createMiseRuntime(
+  lang: Lang,
+  opts: { install?: string[]; test: string[]; dev: string[] },
+): Runtime {
   return {
     lang,
     async provision(repoDir: string): Promise<void> {
@@ -34,6 +37,9 @@ export function createMiseRuntime(lang: Lang, opts: { install?: string[]; test: 
     async runTests(repoDir: string): Promise<TestResult> {
       console.log(chalk.cyan(`Running \`mise exec -- ${opts.test.join(" ")}\`...`));
       return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir);
+    },
+    devCommand() {
+      return { command: resolveBin("mise"), args: ["exec", "--", ...opts.dev] };
     },
   };
 }

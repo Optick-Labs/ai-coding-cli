@@ -1,10 +1,12 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { chatCommand } from "./commands/chat.js";
+import { devCommand } from "./commands/dev.js";
 import { recordCommand } from "./commands/record.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { submitCommand } from "./commands/submit.js";
+import { testCommand } from "./commands/test.js";
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -37,6 +39,21 @@ async function main(): Promise<void> {
     .description("Bundle the diff, re-run tests, and finalize the session")
     .action(async () => {
       await submitCommand();
+    });
+
+  program
+    .command("test")
+    .description("Run the project's tests")
+    .action(async () => {
+      await testCommand();
+    });
+
+  program
+    .command("dev")
+    .description("Start the project's dev server (auto-picks a free port if the default is busy)")
+    .option("--port <port>", "port to bind (default 8080)")
+    .action(async (options: { port?: string }) => {
+      await devCommand(options);
     });
 
   program

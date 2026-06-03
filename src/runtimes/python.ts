@@ -22,4 +22,7 @@ export const pythonRuntime: Runtime = {
     console.log(chalk.cyan("Running `uv run pytest -q`..."));
     return runTestsCapture(resolveBin("uv"), ["run", "pytest", "-q"], repoDir);
   },
+  devCommand() {
+    return { command: resolveBin("uv"), args: ["run", "python", "app.py"] };
+  },
 };

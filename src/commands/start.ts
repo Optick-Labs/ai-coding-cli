@@ -163,10 +163,9 @@ async function bootstrap(args: {
   return { repoDir, dirName, baselineSha };
 }
 
-const NEXT_STEPS: Record<Lang, { test: string; run: string; port: number }> = {
-  python: { test: "uv run pytest", run: "uv run python app.py", port: 5000 },
-  java: { test: "./mvnw test", run: "./mvnw spring-boot:run", port: 5000 },
-};
+// Every seed app binds 127.0.0.1 on PORT (default 8080); `hello-interview dev` honors that and
+// auto-picks a free port if it's taken. Kept as a single constant so this can't go stale per-language.
+const APP_PORT = 8080;
 
 function recorderAlreadyRunning(repoDir: string): boolean {
   const pidPath = recorderPidPath(join(repoDir, ".hi"));
@@ -210,7 +209,6 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
 
   const readme = ["README.md", "readme.md", "README"].find((f) => existsSync(join(repoDir, f)));
   const deadline = new Date(session.deadline);
-  const { test, run, port } = NEXT_STEPS[session.lang];
 
   console.log(chalk.bold.green("\nSession ready."));
   console.log(`Folder:   ${chalk.bold(repoDir)}`);
@@ -227,9 +225,11 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
   console.log(chalk.cyan("\nNext steps:"));
   console.log(`  ${chalk.bold(`cd ${dirName}`)}`);
   console.log(`  ${chalk.dim("Open the README in your editor and read the task brief.")}`);
-  console.log(`  ${chalk.dim(`Then start working. Common commands:`)}`);
-  console.log(`    ${chalk.bold(test).padEnd(40)} ${chalk.dim("# run tests")}`);
-  console.log(`    ${chalk.bold(run).padEnd(40)} ${chalk.dim(`# run the app (localhost:${port})`)}`);
+  console.log(`  ${chalk.dim("Then start working. Common commands:")}`);
+  console.log(`    ${chalk.bold("hello-interview test").padEnd(40)} ${chalk.dim("# run the tests")}`);
+  console.log(
+    `    ${chalk.bold("hello-interview dev").padEnd(40)} ${chalk.dim(`# start the app (http://127.0.0.1:${APP_PORT})`)}`,
+  );
 
   console.log(chalk.cyan(`\nWhen you're done, from inside ${dirName}:`));
   console.log(chalk.bold("  hello-interview submit"));
