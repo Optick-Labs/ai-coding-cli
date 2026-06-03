@@ -104,10 +104,25 @@ export async function submitCommand(): Promise<void> {
     console.log(chalk.cyan("Uploading submission..."));
     const { url } = await fetchArtifactUrl(session.apiBaseUrl, session.token);
     await uploadBundle(url, bundlePath);
+
+    // Capture AI chats BEFORE flipping the session to SUBMITTED. The cockpit stops polling once it
+    // sees SUBMITTED, so if capture (which sets aiChatCaptureStatus) landed after the flip, the page
+    // could flash the "paste your chat" step for a chat the candidate just uploaded here. Recording
+    // while still ACTIVE closes that race. Best-effort: a capture hiccup never blocks the submit.
+    try {
+      await captureChats(session, repoDir);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(chalk.dim(`Chat capture skipped (${message}).`));
+    }
+
     serverResult = await postSubmit(session.apiBaseUrl, session.token, {
       baselineSha: session.baselineSha,
       testsPassedLocal: testResult.passed,
       diff: diffText,
+      // The done-moment stamped before the chat prompt — time spent in the picker isn't counted as
+      // coding time and can't push the candidate over the deadline.
+      submittedAt: submittedAtDate.toISOString(),
       metadata: { elapsedMinutes: local.elapsedMinutes, addedTests },
     });
     overTime = serverResult.overTime;
@@ -123,16 +138,6 @@ export async function submitCommand(): Promise<void> {
   };
   await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
   await updateSession(repoDir, { submittedAt: summary.submittedAt });
-
-  // Ask for the AI chats BEFORE any completion summary — if "Submission complete." prints first the
-  // candidate reads it as done and Ctrl-Cs or ignores the prompt. The upload has already committed
-  // above, so a capture hiccup still never blocks the submit.
-  try {
-    await captureChats(session, repoDir);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(chalk.dim(`Chat capture skipped (${message}).`));
-  }
 
   console.log(chalk.bold.green("\nSubmission complete."));
   console.log(`Task:        ${session.task} (${session.lang})`);

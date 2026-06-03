@@ -28,6 +28,7 @@ export interface SubmitPayload {
   baselineSha: string;
   testsPassedLocal: boolean;
   diff?: string;
+  submittedAt?: string;
   metadata?: Record<string, unknown>;
 }
 
