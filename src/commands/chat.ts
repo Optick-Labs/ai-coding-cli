@@ -103,7 +103,7 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
 
   const totalBytes = selected.reduce((sum, c) => sum + c.byteSize, 0);
   const proceed = await confirm({
-    message: `Upload ${selected.length} chat(s) (${humanBytes(totalBytes)}) to your grader?`,
+    message: `Upload ${selected.length} chat(s) (${humanBytes(totalBytes)}) with your submission?`,
     default: true,
   });
   if (!proceed) {

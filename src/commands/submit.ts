@@ -124,10 +124,17 @@ export async function submitCommand(): Promise<void> {
   await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
   await updateSession(repoDir, { submittedAt: summary.submittedAt });
 
-  // Framed as "uploaded", not "all done" — the optional chat-capture prompt still runs below, and we
-  // don't want a "complete" cue making the candidate Ctrl-C the prompt or walk away. The final
-  // "Submission complete." + cockpit link print last, after capture returns.
-  console.log(chalk.bold("\nCode uploaded."));
+  // Ask for the AI chats BEFORE any completion summary — if "Submission complete." prints first the
+  // candidate reads it as done and Ctrl-Cs or ignores the prompt. The upload has already committed
+  // above, so a capture hiccup still never blocks the submit.
+  try {
+    await captureChats(session, repoDir);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(chalk.dim(`Chat capture skipped (${message}).`));
+  }
+
+  console.log(chalk.bold.green("\nSubmission complete."));
   console.log(`Task:        ${session.task} (${session.lang})`);
   console.log(`Elapsed:     ${local.elapsedMinutes} min`);
   console.log(overTime ? chalk.red("Over time:   yes") : chalk.green("Over time:   no"));
@@ -137,20 +144,11 @@ export async function submitCommand(): Promise<void> {
   console.log(`Added tests: ${addedTests.length > 0 ? addedTests.join(", ") : "(none)"}`);
   console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
 
-  // Attach AI chats after the code is safely uploaded — never let a capture hiccup fail the submit.
-  try {
-    await captureChats(session, repoDir);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log(chalk.dim(`Chat capture skipped (${message}).`));
-  }
-
-  console.log(chalk.bold.green("\nSubmission complete."));
   if (serverResult) {
     console.log(chalk.dim(`Uploaded to control plane (status: ${serverResult.status}).`));
     const nextUrl = serverResult.cockpitUrl ?? serverResult.debriefUrl;
     if (nextUrl) {
-      console.log(`${chalk.bold("Next:")} continue your session at ${chalk.cyan(nextUrl)}`);
+      console.log(`\n${chalk.bold("Next:")} continue your session at ${chalk.cyan(nextUrl)}`);
     }
   } else {
     console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
