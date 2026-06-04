@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import chalk from "chalk";
-import { fetchArtifactUrl, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
+import { fetchArtifactUrl, fetchSession, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
 import { captureChats } from "./chat.js";
 import { findSession, recorderPidPath, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
@@ -55,8 +55,40 @@ function extractAddedTestFiles(nameStatus: string): string[] {
     });
 }
 
+// When the candidate runs `submit` a second time the server has already flipped the session to
+// SUBMITTED, so every write call (artifact-url, submit) 409s with a raw "session is not active".
+// Catch that early — before re-running tests and snapshotting — and point them at their debrief
+// instead of dumping a stack-traced HTTP error.
+function printSessionNotActive(base: string, sessionId: string, status: string, submittedAt: string | null): void {
+  const cockpitUrl = `${base}/practice/ai-coding/byoe/${sessionId}`;
+  if (status === "SUBMITTED") {
+    console.log(chalk.red.bold("\nThis session has already been submitted."));
+    if (submittedAt) {
+      const when = new Date(submittedAt);
+      if (!Number.isNaN(when.getTime())) {
+        console.log(chalk.red(`You submitted at ${when.toLocaleString()}.`));
+      }
+    }
+    console.log(`\nHead to your debrief and feedback: ${chalk.cyan(cockpitUrl)}`);
+    console.log(chalk.dim(`To attach AI chats you forgot, run ${chalk.bold("hello-interview chat")}.`));
+    return;
+  }
+
+  console.log(chalk.red.bold(`\nThis session is no longer active (status: ${status}) and can't be submitted.`));
+  console.log(`\nSee your session at ${chalk.cyan(cockpitUrl)}`);
+}
+
 export async function submitCommand(): Promise<void> {
   const { session, hiDir, repoDir } = await findSession(process.cwd());
+
+  if (session.token && session.apiBaseUrl) {
+    const remote = await fetchSession(session.apiBaseUrl, session.token);
+    if (remote.status !== "ACTIVE") {
+      printSessionNotActive(session.apiBaseUrl, remote.id, remote.status, remote.submittedAt);
+      return;
+    }
+  }
+
   const artifactDir = join(hiDir, "artifact");
   await mkdir(artifactDir, { recursive: true });
 

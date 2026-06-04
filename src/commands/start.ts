@@ -113,6 +113,12 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
         apiBaseUrl: base,
       },
     });
+
+    if (clock.thinkAloudConsent) {
+      console.log(
+        chalk.cyan("\n🎙  Think-aloud recording is on in your browser tab. Keep that tab open while you work."),
+      );
+    }
   } finally {
     if (tempSeedDir) {
       await rm(tempSeedDir, { recursive: true, force: true });

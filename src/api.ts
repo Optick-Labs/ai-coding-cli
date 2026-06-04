@@ -8,6 +8,7 @@ export function apiBaseUrl(override?: string): string {
 }
 
 export interface RemoteSession {
+  id: string;
   task: string;
   language: Lang;
   startedAt: string | null;
@@ -15,6 +16,7 @@ export interface RemoteSession {
   remainingSeconds: number | null;
   status: string;
   baselineSha: string | null;
+  submittedAt: string | null;
 }
 
 export interface SessionClock {
@@ -22,6 +24,7 @@ export interface SessionClock {
   deadline: string;
   remainingSeconds: number;
   status: string;
+  thinkAloudConsent?: boolean;
 }
 
 export interface SubmitPayload {
