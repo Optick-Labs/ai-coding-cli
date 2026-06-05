@@ -25,4 +25,5 @@ export function getRuntime(lang: Lang): Runtime {
   }
 }
 
+export { setVerbose, isVerbose, startSpinner, LANG_LABEL } from "./shared.js";
 export type { Runtime, TestResult } from "./types.js";

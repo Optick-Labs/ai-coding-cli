@@ -6,7 +6,7 @@ import { resolve, join } from "node:path";
 import chalk from "chalk";
 import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClock } from "../api.js";
 import { resolveSeed } from "../seeds.js";
-import { getRuntime } from "../runtimes/index.js";
+import { getRuntime, setVerbose, isVerbose, startSpinner, LANG_LABEL, type Runtime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
 import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
 
@@ -16,6 +16,7 @@ export interface StartOptions {
   token?: string;
   lang?: string;
   seed?: string;
+  verbose?: boolean;
 }
 
 function assertLang(lang: string): Lang {
@@ -37,6 +38,7 @@ async function ensureHiIgnored(repoDir: string): Promise<void> {
 }
 
 export async function startCommand(taskArg: string | undefined, options: StartOptions): Promise<void> {
+  setVerbose(!!options.verbose);
   if (options.token) {
     await startOnline(options.token, options.seed);
     return;
@@ -150,11 +152,17 @@ async function bootstrap(args: {
   await ensureHiIgnored(repoDir);
 
   const runtime = getRuntime(lang);
-  console.log(chalk.cyan("\nProvisioning runtime..."));
+  const label = LANG_LABEL[lang];
+  console.log(chalk.cyan(`\nSetting up your ${label} environment (one-time, ~30–60s the first time)…`));
+  console.log(
+    chalk.dim(
+      `  Installs an isolated toolchain under ~/.local. It won't change your system ${label} or global PATH.`,
+    ),
+  );
+  console.log(chalk.dim("  Re-run with --verbose to see everything.\n"));
   await runtime.provision(repoDir);
 
-  console.log(chalk.cyan("\nRunning baseline tests..."));
-  const baseline = await runtime.runTests(repoDir);
+  const baseline = await runBaselineTests(runtime, repoDir);
   if (!baseline.passed) {
     console.log(
       chalk.red(
@@ -162,11 +170,34 @@ async function bootstrap(args: {
           "Your session is still set up so you can investigate the clone.",
       ),
     );
-  } else {
-    console.log(chalk.green("Baseline tests passed."));
   }
 
   return { repoDir, dirName, baselineSha };
+}
+
+// Baseline run during start: quiet ✓/✗ on the happy path (test output is noise here), with the full
+// log surfaced only on failure or under --verbose.
+async function runBaselineTests(runtime: Runtime, repoDir: string) {
+  if (isVerbose()) {
+    console.log(chalk.cyan("▸ Baseline tests…"));
+    const result = await runtime.runTests(repoDir);
+    if (result.output.trim().length > 0) process.stdout.write(result.output.trim() + "\n");
+    console.log(
+      result.passed ? chalk.green("  ✓ Baseline tests pass") : chalk.red("  ✗ Baseline tests failed"),
+    );
+    return result;
+  }
+  const spinner = startSpinner("Baseline tests pass");
+  const result = await runtime.runTests(repoDir);
+  if (result.passed) {
+    spinner.succeed();
+  } else {
+    spinner.fail();
+    if (result.output.trim().length > 0) {
+      process.stdout.write("\n" + chalk.dim(result.output.trim()) + "\n");
+    }
+  }
+  return result;
 }
 
 // Every seed app binds 127.0.0.1 on PORT (default 8080); `byoe dev` honors that and

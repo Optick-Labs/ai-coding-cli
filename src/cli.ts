@@ -23,9 +23,15 @@ async function main(): Promise<void> {
     .option("--token <token>", "session token from hellointerview.com")
     .option("--lang <lang>", "language: python | java | typescript | go | csharp (offline mode)")
     .option("--seed <url-or-path>", "override seed repo source (offline mode)")
-    .action(async (task: string | undefined, options: { token?: string; lang?: string; seed?: string }) => {
-      await startCommand(task, options);
-    });
+    .option("--verbose", "show full runtime provisioning output")
+    .action(
+      async (
+        task: string | undefined,
+        options: { token?: string; lang?: string; seed?: string; verbose?: boolean },
+      ) => {
+        await startCommand(task, options);
+      },
+    );
 
   program
     .command("status")

@@ -1,11 +1,9 @@
-import chalk from "chalk";
 import type { Runtime, TestResult } from "./types.js";
-import { onPath, resolveBin, runTestsCapture, streamInstall, streamRun } from "./shared.js";
+import { onPath, resolveBin, runTestsCapture, installScript, runCaptured, step } from "./shared.js";
 
 async function ensureUv(): Promise<void> {
   if (await onPath("uv")) return;
-  console.log(chalk.yellow("uv not found. Installing uv..."));
-  await streamInstall("https://astral.sh/uv/install.sh");
+  await installScript("https://astral.sh/uv/install.sh");
   if (!(await onPath("uv"))) {
     throw new Error("uv install completed but uv is still not on PATH (~/.local/bin).");
   }
@@ -14,12 +12,12 @@ async function ensureUv(): Promise<void> {
 export const pythonRuntime: Runtime = {
   lang: "python",
   async provision(repoDir: string): Promise<void> {
-    await ensureUv();
-    console.log(chalk.cyan("Running `uv sync`..."));
-    await streamRun(resolveBin("uv"), ["sync"], repoDir);
+    await step("Toolchain manager ready", ensureUv);
+    await step("Python toolchain + dependencies installed", () =>
+      runCaptured(resolveBin("uv"), ["sync"], repoDir),
+    );
   },
   async runTests(repoDir: string): Promise<TestResult> {
-    console.log(chalk.cyan("Running `uv run pytest -q`..."));
     return runTestsCapture(resolveBin("uv"), ["run", "pytest", "-q"], repoDir);
   },
   devCommand() {

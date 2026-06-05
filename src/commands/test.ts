@@ -11,6 +11,10 @@ export async function testCommand(): Promise<void> {
   const result = await runtime.runTests(repoDir);
   const durationMs = Date.now() - startedAt;
 
+  if (result.output.trim().length > 0) {
+    process.stdout.write(result.output.trim() + "\n");
+  }
+
   console.log(result.passed ? chalk.bold.green("\nTests passed.") : chalk.bold.red("\nTests failed."));
 
   await pingEvent(session, {

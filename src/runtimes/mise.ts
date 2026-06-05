@@ -1,12 +1,10 @@
-import chalk from "chalk";
 import type { Lang } from "../session.js";
 import type { Runtime, TestResult } from "./types.js";
-import { onPath, resolveBin, runTestsCapture, streamInstall, streamRun } from "./shared.js";
+import { onPath, resolveBin, runTestsCapture, installScript, runCaptured, step, LANG_LABEL } from "./shared.js";
 
 export async function ensureMise(): Promise<void> {
   if (await onPath("mise")) return;
-  console.log(chalk.yellow("mise not found. Installing mise..."));
-  await streamInstall("https://mise.run");
+  await installScript("https://mise.run");
   if (!(await onPath("mise"))) {
     throw new Error("mise install completed but mise is still not on PATH (~/.local/bin).");
   }
@@ -23,19 +21,20 @@ export function createMiseRuntime(
   return {
     lang,
     async provision(repoDir: string): Promise<void> {
-      await ensureMise();
+      await step("Toolchain manager ready", ensureMise);
       const mise = resolveBin("mise");
-      console.log(chalk.cyan("Trusting repo .mise.toml..."));
-      await streamRun(mise, ["trust"], repoDir);
-      console.log(chalk.cyan("Running `mise install`..."));
-      await streamRun(mise, ["install"], repoDir);
-      if (opts.install) {
-        console.log(chalk.cyan(`Running \`mise exec -- ${opts.install.join(" ")}\`...`));
-        await streamRun(mise, ["exec", "--", ...opts.install], repoDir);
+      await step(`${LANG_LABEL[lang]} toolchain installed`, async () => {
+        await runCaptured(mise, ["trust"], repoDir);
+        await runCaptured(mise, ["install"], repoDir);
+      });
+      const installCmd = opts.install;
+      if (installCmd) {
+        await step("Dependencies installed", () =>
+          runCaptured(mise, ["exec", "--", ...installCmd], repoDir),
+        );
       }
     },
     async runTests(repoDir: string): Promise<TestResult> {
-      console.log(chalk.cyan(`Running \`mise exec -- ${opts.test.join(" ")}\`...`));
       return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir);
     },
     devCommand() {

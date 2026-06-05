@@ -124,6 +124,9 @@ export async function submitCommand(): Promise<void> {
   console.log(chalk.cyan("Re-running tests..."));
   const runtime = getRuntime(session.lang);
   const testResult = await runtime.runTests(repoDir);
+  if (testResult.output.trim().length > 0) {
+    process.stdout.write(testResult.output.trim() + "\n");
+  }
   await writeFile(join(artifactDir, "test-result.txt"), testResult.output, "utf8");
 
   const submittedAtDate = new Date();
