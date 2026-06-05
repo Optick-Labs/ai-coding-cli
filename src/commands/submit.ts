@@ -70,7 +70,7 @@ function printSessionNotActive(base: string, sessionId: string, status: string, 
       }
     }
     console.log(`\nHead to your debrief and feedback: ${chalk.cyan(cockpitUrl)}`);
-    console.log(chalk.dim(`To attach AI chats you forgot, run ${chalk.bold("hello-interview chat")}.`));
+    console.log(chalk.dim(`To attach AI chats you forgot, run ${chalk.bold("npx @hellointerview/byoe chat")}.`));
     return;
   }
 

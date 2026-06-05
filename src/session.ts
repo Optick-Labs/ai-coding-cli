@@ -71,7 +71,7 @@ export async function findSession(startDir: string): Promise<FoundSession> {
   }
 
   throw new Error(
-    "No Hello Interview session found. Run this command from inside a session folder (one created by `hello-interview start`).",
+    "No Hello Interview session found. Run this command from inside a session folder (one created by `npx @hellointerview/byoe start`).",
   );
 }
 

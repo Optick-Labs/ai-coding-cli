@@ -1,5 +1,5 @@
 {
-  "name": "hello-interview",
+  "name": "@hellointerview/byoe",
   "version": "0.1.0",
   "description": "Local coding-practice bootstrap CLI for Hello Interview",
   "type": "module",
@@ -11,6 +11,7 @@
   "homepage": "https://www.hellointerview.com",
   "keywords": [
     "hello-interview",
+    "byoe",
     "interview",
     "coding-practice",
     "cli"
@@ -22,7 +23,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsup src/cli.ts --format esm --clean"
+    "build": "tsup src/cli.ts --format esm --clean",
+    "dev": "tsup src/cli.ts --format esm --watch",
+    "link:byoe": "yarn build && npm link",
+    "unlink:byoe": "npm rm -g @hellointerview/byoe"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.5.2",

@@ -1,0 +1,43 @@
+Hello Interview CLI License
+
+Copyright (c) 2026 Optick Labs Inc. (doing business as "Hello Interview").
+All rights reserved.
+
+This software, including the @hellointerview/byoe command-line interface and
+all accompanying files (the "Software"), is the proprietary property of Optick
+Labs Inc. ("Company"). It is licensed, not sold.
+
+1. Grant of License. Subject to your compliance with this license and the
+   Hello Interview Terms of Use (https://www.hellointerview.com/terms), the
+   Company grants you a limited, personal, non-exclusive, non-transferable,
+   non-sublicensable, revocable license to download, install, and run the
+   Software solely to access and use Hello Interview's services.
+
+2. Restrictions. Except as expressly permitted above, you may not, in whole or
+   in part: (a) copy, reproduce, or redistribute the Software; (b) modify,
+   adapt, translate, or create derivative works of the Software; (c) reverse
+   engineer, decompile, or disassemble the Software, or otherwise attempt to
+   derive its source code, except to the extent this restriction is prohibited
+   by applicable law; (d) sell, rent, lease, lend, sublicense, or otherwise
+   commercially exploit the Software; (e) remove or alter any proprietary
+   notices; or (f) use the Software to build, or to assist in building, a
+   competing product or service.
+
+3. Ownership. The Company retains all right, title, and interest in and to the
+   Software, including all related intellectual property rights. No rights are
+   granted to you except those expressly set forth in this license, and the
+   Company reserves all rights not expressly granted.
+
+4. No Warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+5. Limitation of Liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT
+   SHALL OPTICK LABS INC. BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF,
+   OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+6. Termination. This license terminates automatically if you breach any of its
+   terms. Upon termination, you must stop using the Software and delete all
+   copies in your possession or control.
