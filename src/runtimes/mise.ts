@@ -34,8 +34,8 @@ export function createMiseRuntime(
         );
       }
     },
-    async runTests(repoDir: string): Promise<TestResult> {
-      return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir);
+    async runTests(repoDir: string, timeoutMs?: number): Promise<TestResult> {
+      return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir, timeoutMs);
     },
     devCommand() {
       return { command: resolveBin("mise"), args: ["exec", "--", ...opts.dev] };

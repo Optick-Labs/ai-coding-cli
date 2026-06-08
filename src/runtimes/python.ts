@@ -17,8 +17,8 @@ export const pythonRuntime: Runtime = {
       runCaptured(resolveBin("uv"), ["sync"], repoDir),
     );
   },
-  async runTests(repoDir: string): Promise<TestResult> {
-    return runTestsCapture(resolveBin("uv"), ["run", "pytest", "-q"], repoDir);
+  async runTests(repoDir: string, timeoutMs?: number): Promise<TestResult> {
+    return runTestsCapture(resolveBin("uv"), ["run", "pytest", "-q"], repoDir, timeoutMs);
   },
   devCommand() {
     return { command: resolveBin("uv"), args: ["run", "python", "app.py"] };

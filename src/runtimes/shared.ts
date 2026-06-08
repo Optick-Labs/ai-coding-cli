@@ -162,11 +162,15 @@ export function spawnStreaming(
 }
 
 // Capture a test run without printing — callers decide how to surface it (full output for `byoe test`
-// and `submit`, a quiet ✓/✗ for the baseline run during `start`).
+// and `submit`, a quiet ✓/✗ for the baseline run during `start`). Unbounded by default; pass
+// `timeoutMs` only where a hang would block something (the submit path), so a runaway suite is killed
+// and reported as a clean timeout instead of stalling. Other call sites (start, `byoe test`) stay
+// unbounded — a candidate iterating locally can take as long as they want.
 export async function runTestsCapture(
   command: string,
   args: string[],
   cwd: string,
+  timeoutMs?: number,
 ): Promise<TestResult> {
   try {
     const result = await execa(command, args, {
@@ -174,8 +178,20 @@ export async function runTestsCapture(
       all: true,
       env: envWithLocalBin(),
       reject: false,
+      timeout: timeoutMs,
     });
     const output = result.all ?? "";
+    if (result.timedOut && timeoutMs) {
+      const seconds = Math.round(timeoutMs / 1000);
+      const notice = `\n\nTest run timed out after ${seconds}s and was stopped.`;
+      return {
+        passed: false,
+        output: output.trim().length > 0 ? output + notice : notice.trimStart(),
+        exitCode: result.exitCode ?? null,
+        signal: result.signal ?? undefined,
+        timedOut: true,
+      };
+    }
     return {
       passed: result.exitCode === 0,
       output,

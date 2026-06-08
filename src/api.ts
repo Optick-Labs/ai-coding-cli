@@ -29,7 +29,9 @@ export interface SessionClock {
 
 export interface SubmitPayload {
   baselineSha: string;
-  testsPassedLocal: boolean;
+  // Omitted now that tests run after the submission is recorded — the result lands later via a
+  // TEST_RUN event so a slow/hanging suite can't block the submit.
+  testsPassedLocal?: boolean;
   diff?: string;
   submittedAt?: string;
   metadata?: Record<string, unknown>;
@@ -129,6 +131,7 @@ export interface ByoeEventPayload {
   exitCode?: number;
   port?: number;
   durationMs?: number;
+  timedOut?: boolean;
 }
 
 // Reports a process event (a test run / dev-server start). Best-effort by design: a short timeout so a

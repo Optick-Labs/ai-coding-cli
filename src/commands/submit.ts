@@ -4,10 +4,15 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { fetchArtifactUrl, fetchSession, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
 import { captureChats } from "./chat.js";
+import { pingEvent } from "./events.js";
 import { findSession, recorderPidPath, updateSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
 import { diff, log, diffNameStatus, bundleSnapshot, snapshotCommit } from "../git.js";
 import { computeRemaining } from "../time.js";
+
+// Cap the post-submission test re-run. The submission is already recorded by the time this runs, so
+// this only bounds how long we wait to show the candidate a local pass/fail before the CLI exits.
+const SUBMIT_TEST_TIMEOUT_MS = 20_000;
 
 // Stop the background recorder before we snapshot so it can't run git concurrently with the submit.
 // Best-effort: a missing or dead recorder is the normal case for offline/already-finished sessions.
@@ -121,20 +126,15 @@ export async function submitCommand(): Promise<void> {
     console.log(chalk.yellow("Warning: no changes since baseline — submitting an unchanged repo."));
   }
 
-  console.log(chalk.cyan("Re-running tests..."));
-  const runtime = getRuntime(session.lang);
-  const testResult = await runtime.runTests(repoDir);
-  if (testResult.output.trim().length > 0) {
-    process.stdout.write(testResult.output.trim() + "\n");
-  }
-  await writeFile(join(artifactDir, "test-result.txt"), testResult.output, "utf8");
-
   const submittedAtDate = new Date();
   const local = computeRemaining(session.deadline, session.startedAt, submittedAtDate);
 
   let overTime = local.overTime;
   let serverResult: SubmitResult | undefined;
 
+  // Record the submission FIRST, without waiting for tests. Tests are re-run below for the candidate's
+  // benefit, but a slow or hanging suite must never block (or delay) the submission landing on the
+  // server. The test outcome is reported afterward via a TEST_RUN event.
   if (session.token && session.apiBaseUrl) {
     console.log(chalk.cyan("Uploading submission..."));
     const { url } = await fetchArtifactUrl(session.apiBaseUrl, session.token);
@@ -153,7 +153,6 @@ export async function submitCommand(): Promise<void> {
 
     serverResult = await postSubmit(session.apiBaseUrl, session.token, {
       baselineSha: session.baselineSha,
-      testsPassedLocal: testResult.passed,
       diff: diffText,
       // The done-moment stamped before the chat prompt — time spent in the picker isn't counted as
       // coding time and can't push the candidate over the deadline.
@@ -163,24 +162,12 @@ export async function submitCommand(): Promise<void> {
     overTime = serverResult.overTime;
   }
 
-  const summary: Summary = {
-    task: session.task,
-    lang: session.lang,
-    submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString(),
-    overTime,
-    elapsedMinutes: local.elapsedMinutes,
-    testsPassed: testResult.passed,
-  };
-  await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
-  await updateSession(repoDir, { submittedAt: summary.submittedAt });
+  await updateSession(repoDir, { submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString() });
 
   console.log(chalk.bold.green("\nSubmission complete."));
   console.log(`Task:        ${session.task} (${session.lang})`);
   console.log(`Elapsed:     ${local.elapsedMinutes} min`);
   console.log(overTime ? chalk.red("Over time:   yes") : chalk.green("Over time:   no"));
-  console.log(
-    testResult.passed ? chalk.green("Tests:       passed (local, unverified)") : chalk.red("Tests:       FAILED (local)"),
-  );
   console.log(`Added tests: ${addedTests.length > 0 ? addedTests.join(", ") : "(none)"}`);
   console.log(`Artifacts:   ${chalk.bold(artifactDir)}`);
 
@@ -192,5 +179,45 @@ export async function submitCommand(): Promise<void> {
     }
   } else {
     console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
+  }
+
+  // Now run tests for the candidate's reference and report the result separately. Bounded so a hang
+  // can't strand the CLI — the submission above is already recorded either way.
+  console.log(chalk.cyan("\nRunning tests..."));
+  const runtime = getRuntime(session.lang);
+  const startedAt = Date.now();
+  const testResult = await runtime.runTests(repoDir, SUBMIT_TEST_TIMEOUT_MS);
+  const durationMs = Date.now() - startedAt;
+  if (testResult.output.trim().length > 0) {
+    process.stdout.write(testResult.output.trim() + "\n");
+  }
+  await writeFile(join(artifactDir, "test-result.txt"), testResult.output, "utf8");
+
+  const summary: Summary = {
+    task: session.task,
+    lang: session.lang,
+    submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString(),
+    overTime,
+    elapsedMinutes: local.elapsedMinutes,
+    testsPassed: testResult.passed,
+  };
+  await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
+
+  await pingEvent(session, {
+    type: "TEST_RUN",
+    passed: testResult.passed,
+    exitCode: testResult.exitCode ?? undefined,
+    durationMs,
+    timedOut: testResult.timedOut,
+  });
+
+  if (testResult.timedOut) {
+    console.log(chalk.yellow("Tests:       timed out (local) — submission already recorded."));
+  } else {
+    console.log(
+      testResult.passed
+        ? chalk.green("Tests:       passed (local, unverified)")
+        : chalk.red("Tests:       FAILED (local)"),
+    );
   }
 }
