@@ -39,7 +39,9 @@ interface Summary {
   submittedAt: string;
   overTime: boolean;
   elapsedMinutes: number;
-  testsPassed: boolean;
+  // null for self-directed (build-from-scratch) tasks: there is no managed test runner, so a
+  // pass/fail simply doesn't apply.
+  testsPassed: boolean | null;
 }
 
 function extractAddedTestFiles(nameStatus: string): string[] {
@@ -192,7 +194,7 @@ export async function submitCommand(): Promise<void> {
       submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString(),
       overTime,
       elapsedMinutes: local.elapsedMinutes,
-      testsPassed: false,
+      testsPassed: null,
     };
     await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
     console.log(chalk.dim("\nNo built-in test runner for this task — your full diff was captured."));

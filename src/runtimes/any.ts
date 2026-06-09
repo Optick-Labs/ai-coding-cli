@@ -2,8 +2,9 @@ import type { Runtime, TestResult } from "./types.js";
 
 // The "any" runtime backs build-from-scratch tasks: the candidate picks their own language and
 // tooling, so there's nothing for us to provision and no built-in test/dev runner. The command
-// handlers branch on `selfDirected` and never actually call these methods — they exist only to
-// satisfy the Runtime interface. `byoe submit` still captures the whole working tree as a diff.
+// handlers branch on `selfDirected` before ever touching these methods; runTests/devCommand throw
+// so a future call path that forgets the branch fails loudly instead of faking a green run.
+// `byoe submit` still captures the whole working tree as a diff.
 export const anyRuntime: Runtime = {
   lang: "any",
   selfDirected: true,
@@ -11,9 +12,9 @@ export const anyRuntime: Runtime = {
     // Nothing to set up.
   },
   async runTests(): Promise<TestResult> {
-    return { passed: true, output: "", exitCode: null };
+    throw new Error("self-directed task has no built-in test runner");
   },
-  devCommand() {
-    return { command: "true", args: [] };
+  devCommand(): never {
+    throw new Error("self-directed task has no built-in dev server");
   },
 };

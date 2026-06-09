@@ -10,10 +10,11 @@ export interface TestResult {
 
 export interface Runtime {
   lang: Lang;
-  // Set on the "any" runtime: a build-from-scratch task with no managed toolchain. The command
+  // True only on the "any" runtime: a build-from-scratch task with no managed toolchain. The command
   // handlers branch on this to skip provisioning and to tell the candidate to use their own
-  // test/dev tools rather than pretending there's a built-in runner.
-  selfDirected?: boolean;
+  // test/dev tools rather than pretending there's a built-in runner. Required (not optional) so
+  // every new runtime declares it explicitly instead of silently defaulting.
+  selfDirected: boolean;
   provision(repoDir: string): Promise<void>;
   // `timeoutMs` bounds the run (used on submit so a hanging suite can't stall it); omit for an
   // unbounded run during local iteration.

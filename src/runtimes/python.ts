@@ -11,6 +11,7 @@ async function ensureUv(): Promise<void> {
 
 export const pythonRuntime: Runtime = {
   lang: "python",
+  selfDirected: false,
   async provision(repoDir: string): Promise<void> {
     await step("Toolchain manager ready", ensureUv);
     await step("Python toolchain + dependencies installed", () =>

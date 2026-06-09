@@ -20,6 +20,7 @@ export function createMiseRuntime(
 ): Runtime {
   return {
     lang,
+    selfDirected: false,
     async provision(repoDir: string): Promise<void> {
       await step("Toolchain manager ready", ensureMise);
       const mise = resolveBin("mise");
