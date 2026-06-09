@@ -181,10 +181,27 @@ export async function submitCommand(): Promise<void> {
     console.log(chalk.dim("Offline mode — artifact saved locally, not uploaded."));
   }
 
+  const runtime = getRuntime(session.lang);
+
+  // Build-from-scratch tasks have no managed test runner — there's nothing to re-run. The full diff
+  // is already captured above; just record the summary and tell the candidate so.
+  if (runtime.selfDirected) {
+    const summary: Summary = {
+      task: session.task,
+      lang: session.lang,
+      submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString(),
+      overTime,
+      elapsedMinutes: local.elapsedMinutes,
+      testsPassed: false,
+    };
+    await writeFile(join(artifactDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n", "utf8");
+    console.log(chalk.dim("\nNo built-in test runner for this task — your full diff was captured."));
+    return;
+  }
+
   // Now run tests for the candidate's reference and report the result separately. Bounded so a hang
   // can't strand the CLI — the submission above is already recorded either way.
   console.log(chalk.cyan("\nRunning tests..."));
-  const runtime = getRuntime(session.lang);
   const startedAt = Date.now();
   const testResult = await runtime.runTests(repoDir, SUBMIT_TEST_TIMEOUT_MS);
   const durationMs = Date.now() - startedAt;

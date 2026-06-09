@@ -5,6 +5,7 @@ import { javaRuntime } from "./java.js";
 import { typescriptRuntime } from "./typescript.js";
 import { goRuntime } from "./go.js";
 import { csharpRuntime } from "./csharp.js";
+import { anyRuntime } from "./any.js";
 
 export function getRuntime(lang: Lang): Runtime {
   switch (lang) {
@@ -18,6 +19,8 @@ export function getRuntime(lang: Lang): Runtime {
       return goRuntime;
     case "csharp":
       return csharpRuntime;
+    case "any":
+      return anyRuntime;
     default: {
       const exhaustive: never = lang;
       throw new Error(`Unsupported lang: ${String(exhaustive)}`);

@@ -196,6 +196,19 @@ async function bootstrap(
   });
 
   const runtime = getRuntime(lang);
+
+  // A self-directed (build-from-scratch) task has no managed toolchain and no baseline tests —
+  // skip provisioning entirely and tell the candidate it's theirs to build in any stack.
+  if (runtime.selfDirected) {
+    console.log(
+      chalk.cyan("\nThis is a build-from-scratch task — there's nothing to set up."),
+    );
+    console.log(
+      chalk.dim("  Build it in whatever language and tools you want. Read the README and start."),
+    );
+    return { repoDir, dirName, baselineSha };
+  }
+
   const label = LANG_LABEL[lang];
   console.log(chalk.cyan(`\nSetting up your ${label} environment (one-time, ~30–60s the first time)…`));
   console.log(
@@ -306,11 +319,20 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
   console.log(chalk.cyan("\nNext steps:"));
   console.log(`  ${chalk.bold(`cd ${dirName}`)}`);
   console.log(`  ${chalk.dim("Open the README in your editor and read the task brief.")}`);
-  console.log(`  ${chalk.dim("Then start working. Common commands:")}`);
-  console.log(`    ${chalk.bold("npx @hellointerview/byoe test").padEnd(40)} ${chalk.dim("# run the tests")}`);
-  console.log(
-    `    ${chalk.bold("npx @hellointerview/byoe dev").padEnd(40)} ${chalk.dim(`# start the app (http://127.0.0.1:${APP_PORT})`)}`,
-  );
+  if (getRuntime(session.lang).selfDirected) {
+    console.log(
+      `  ${chalk.dim("Then start building — in any language, with your own test/dev tools.")}`,
+    );
+    console.log(
+      `  ${chalk.dim("There's no built-in test or dev runner for this task; `submit` captures everything you write.")}`,
+    );
+  } else {
+    console.log(`  ${chalk.dim("Then start working. Common commands:")}`);
+    console.log(`    ${chalk.bold("npx @hellointerview/byoe test").padEnd(40)} ${chalk.dim("# run the tests")}`);
+    console.log(
+      `    ${chalk.bold("npx @hellointerview/byoe dev").padEnd(40)} ${chalk.dim(`# start the app (http://127.0.0.1:${APP_PORT})`)}`,
+    );
+  }
 
   console.log(chalk.cyan(`\nWhen you're done, from inside ${dirName}:`));
   console.log(chalk.bold("  npx @hellointerview/byoe submit"));

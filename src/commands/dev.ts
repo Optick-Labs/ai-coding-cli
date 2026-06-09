@@ -31,6 +31,13 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const { session, repoDir } = await findSession(process.cwd());
   const runtime = getRuntime(session.lang);
 
+  // Build-from-scratch tasks have no managed dev server — the candidate runs their app themselves.
+  if (runtime.selfDirected) {
+    console.log(chalk.cyan("This task has no built-in dev server."));
+    console.log(chalk.dim("Run your app however you like, in whatever stack you chose."));
+    return;
+  }
+
   const requested = parsePort(options.port);
   if (requested < 1024) {
     console.log(chalk.dim(`Note: port ${requested} is privileged and may require elevated permissions.`));

@@ -20,6 +20,7 @@ export const LANG_LABEL: Record<Lang, string> = {
   typescript: "TypeScript",
   go: "Go",
   csharp: "C#",
+  any: "Any language",
 };
 
 export function localBinDir(): string {

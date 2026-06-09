@@ -7,6 +7,19 @@ export async function testCommand(): Promise<void> {
   const { session, repoDir } = await findSession(process.cwd());
   const runtime = getRuntime(session.lang);
 
+  // Build-from-scratch tasks have no managed test runner — the candidate uses their own tools.
+  if (runtime.selfDirected) {
+    console.log(
+      chalk.cyan("This task has no built-in test runner."),
+    );
+    console.log(
+      chalk.dim(
+        "Run your project's own tests however you like. `npx @hellointerview/byoe submit` captures everything you've written.",
+      ),
+    );
+    return;
+  }
+
   const startedAt = Date.now();
   const result = await runtime.runTests(repoDir);
   const durationMs = Date.now() - startedAt;

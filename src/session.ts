@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 
-export const LANGS = ["python", "java", "typescript", "go", "csharp"] as const;
+export const LANGS = ["python", "java", "typescript", "go", "csharp", "any"] as const;
 export type Lang = (typeof LANGS)[number];
 
 export interface Session {
