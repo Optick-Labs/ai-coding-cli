@@ -46,6 +46,19 @@ export interface SubmitResult {
   cockpitUrl?: string;
 }
 
+// A non-2xx from the control plane. Typed (rather than a bare Error) so start telemetry can split
+// user-side failures (401/403 — a bad or expired token) from server-side ones (5xx) by status.
+export class ApiError extends Error {
+  readonly status: number;
+  readonly path: string;
+  constructor(path: string, status: number, body: string) {
+    super(`${path} failed (${status})${body ? `: ${body}` : ""}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+  }
+}
+
 async function request(base: string, path: string, token: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(`${base}${path}`, {
     ...init,
@@ -57,7 +70,7 @@ async function request(base: string, path: string, token: string, init?: Request
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`${path} failed (${res.status})${text ? `: ${text}` : ""}`);
+    throw new ApiError(path, res.status, text);
   }
   return res;
 }
@@ -142,6 +155,47 @@ export async function postByoeEvent(base: string, token: string, event: ByoeEven
     method: "POST",
     body: JSON.stringify(event),
     signal: AbortSignal.timeout(2000),
+  });
+}
+
+export type ByoeStartPhase =
+  | "RESOLVE_SESSION"
+  | "DOWNLOAD_SEED"
+  | "CLONE"
+  | "PROVISION"
+  | "BASELINE_TESTS"
+  | "START_CLOCK"
+  | "FINALIZE";
+
+export interface ByoeStartDiagnosticPayload {
+  ok: boolean;
+  phase: ByoeStartPhase;
+  durationMs?: number;
+  phaseTimings?: Record<string, number>;
+  errorKind?: string | null;
+  errorMessage?: string | null;
+  errorCommand?: string | null;
+  exitCode?: number | null;
+  outputTail?: string | null;
+  cliVersion?: string;
+  nodeVersion?: string;
+  os?: string;
+  arch?: string;
+}
+
+// Reports a `start` outcome (success or failure). Best-effort: a short timeout so a slow/down server
+// can't hang setup, and the caller swallows failures. On the failure path the caller awaits this
+// (within the timeout) so the event actually flushes before the process exits.
+export async function postByoeStartDiagnostic(
+  base: string,
+  token: string,
+  payload: ByoeStartDiagnosticPayload,
+  timeoutMs = 2500,
+): Promise<void> {
+  await request(base, "/api/byoe/diagnostics", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 

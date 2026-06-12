@@ -9,6 +9,7 @@ import { resolveSeed } from "../seeds.js";
 import { getRuntime, setVerbose, isVerbose, startSpinner, LANG_LABEL, type Runtime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
 import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
+import { StartTelemetry, LOCAL_LOG_NAME, namedError } from "./start-telemetry.js";
 
 const DEADLINE_MINUTES = 60;
 
@@ -21,7 +22,9 @@ export interface StartOptions {
 
 function assertLang(lang: string): Lang {
   if ((LANGS as readonly string[]).includes(lang)) return lang as Lang;
-  throw new Error(`language must be one of ${LANGS.join(", ")} (got "${lang}").`);
+  // Named for telemetry: online, this fires when the server hands back a language this build doesn't
+  // know — i.e. an outdated CLI — which is worth seeing as its own bucket, not a generic Error.
+  throw namedError("UnsupportedLanguage", `language must be one of ${LANGS.join(", ")} (got "${lang}").`);
 }
 
 async function ensureHiIgnored(repoDir: string): Promise<void> {
@@ -54,73 +57,101 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
   const lang = assertLang(options.lang);
   const source = resolveSeed({ task: taskArg, lang, seedFlag: options.seed });
 
-  const { repoDir, dirName, baselineSha } = await bootstrap({ task: taskArg, lang, source });
+  // Offline mode has no token, so telemetry is local-only (the network report no-ops). It still drops
+  // a debug breadcrumb on a hard failure, which is handy while iterating on seeds.
+  const telemetry = new StartTelemetry({});
+  try {
+    const { repoDir, dirName, baselineSha, baseline } = await bootstrap({ task: taskArg, lang, source }, telemetry);
 
-  const startedAt = new Date();
-  const deadline = new Date(startedAt.getTime() + DEADLINE_MINUTES * 60_000);
-  await finalize({
-    repoDir,
-    dirName,
-    session: {
-      task: taskArg,
-      lang,
-      startedAt: startedAt.toISOString(),
-      deadlineMinutes: DEADLINE_MINUTES,
-      deadline: deadline.toISOString(),
-      baselineSha,
-    },
-  });
+    const startedAt = new Date();
+    const deadline = new Date(startedAt.getTime() + DEADLINE_MINUTES * 60_000);
+    await telemetry.phase("FINALIZE", () =>
+      finalize({
+        repoDir,
+        dirName,
+        session: {
+          task: taskArg,
+          lang,
+          startedAt: startedAt.toISOString(),
+          deadlineMinutes: DEADLINE_MINUTES,
+          deadline: deadline.toISOString(),
+          baselineSha,
+        },
+      }),
+    );
+
+    if (baseline.passed) await telemetry.success();
+    else await telemetry.baselineFailed(baseline.output);
+  } catch (error) {
+    await telemetry.failure(error);
+    printFailureHint();
+    throw error;
+  }
 }
 
 async function startOnline(token: string, seedOverride?: string): Promise<void> {
   const base = apiBaseUrl();
-  console.log(chalk.cyan("Resolving session from hellointerview.com..."));
-  const remote = await fetchSession(base, token);
-  const lang = assertLang(remote.language);
-
-  const override = seedOverride?.trim();
-  let source: string;
+  const telemetry = new StartTelemetry({ token, apiBaseUrl: base });
   let tempSeedDir: string | undefined;
-  if (override && override.length > 0) {
-    source = override;
-  } else {
-    console.log(chalk.cyan("Downloading seed..."));
-    const { url } = await fetchSeedUrl(base, token);
-    tempSeedDir = await mkdtemp(join(tmpdir(), "hi-byoe-seed-"));
-    source = join(tempSeedDir, "baseline.bundle");
-    await downloadBundle(url, source);
-  }
 
   try {
-    const { repoDir, dirName, baselineSha } = await bootstrap({ task: remote.task, lang, source });
+    console.log(chalk.cyan("Resolving session from hellointerview.com..."));
+    const remote = await telemetry.phase("RESOLVE_SESSION", () => fetchSession(base, token));
+    const lang = assertLang(remote.language);
+
+    const override = seedOverride?.trim();
+    let source: string;
+    if (override && override.length > 0) {
+      source = override;
+    } else {
+      source = await telemetry.phase("DOWNLOAD_SEED", async () => {
+        console.log(chalk.cyan("Downloading seed..."));
+        const { url } = await fetchSeedUrl(base, token);
+        tempSeedDir = await mkdtemp(join(tmpdir(), "hi-byoe-seed-"));
+        const dest = join(tempSeedDir, "baseline.bundle");
+        await downloadBundle(url, dest);
+        return dest;
+      });
+    }
+
+    const { repoDir, dirName, baselineSha, baseline } = await bootstrap({ task: remote.task, lang, source }, telemetry);
 
     console.log(chalk.cyan("\nStarting session clock..."));
-    const clock = await startSessionClock(base, token);
+    const clock = await telemetry.phase("START_CLOCK", () => startSessionClock(base, token));
     const deadlineMinutes = Math.max(
       1,
       Math.round((new Date(clock.deadline).getTime() - new Date(clock.startedAt).getTime()) / 60_000),
     );
 
-    await finalize({
-      repoDir,
-      dirName,
-      session: {
-        task: remote.task,
-        lang,
-        startedAt: clock.startedAt,
-        deadlineMinutes,
-        deadline: clock.deadline,
-        baselineSha,
-        token,
-        apiBaseUrl: base,
-      },
-    });
+    await telemetry.phase("FINALIZE", () =>
+      finalize({
+        repoDir,
+        dirName,
+        session: {
+          task: remote.task,
+          lang,
+          startedAt: clock.startedAt,
+          deadlineMinutes,
+          deadline: clock.deadline,
+          baselineSha,
+          token,
+          apiBaseUrl: base,
+        },
+      }),
+    );
 
     if (clock.thinkAloudConsent) {
       console.log(
         chalk.cyan("\n🎙  Think-aloud recording is on in your browser tab. Keep that tab open while you work."),
       );
     }
+
+    if (baseline.passed) await telemetry.success();
+    else await telemetry.baselineFailed(baseline.output);
+  } catch (error) {
+    await telemetry.failure(error);
+    printFailureHint();
+    throw error;
   } finally {
     if (tempSeedDir) {
       await rm(tempSeedDir, { recursive: true, force: true });
@@ -128,28 +159,38 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
   }
 }
 
-async function bootstrap(args: {
-  task: string;
-  lang: Lang;
-  source: string;
-}): Promise<{ repoDir: string; dirName: string; baselineSha: string }> {
+function printFailureHint(): void {
+  console.log(
+    chalk.dim(
+      `\nWe logged what went wrong. If it keeps happening, re-run with --verbose and send us ./${LOCAL_LOG_NAME}.`,
+    ),
+  );
+}
+
+async function bootstrap(
+  args: { task: string; lang: Lang; source: string },
+  telemetry: StartTelemetry,
+): Promise<{ repoDir: string; dirName: string; baselineSha: string; baseline: { passed: boolean; output: string } }> {
   const { task, lang, source } = args;
   const dirName = `${task}-${lang}`;
   const repoDir = resolve(process.cwd(), dirName);
 
-  if (existsSync(repoDir)) {
-    throw new Error(
-      `Directory ${chalk.bold(dirName)} already exists. Remove it or start in a clean location.`,
-    );
-  }
-
-  console.log(chalk.cyan(`Cloning seed for ${task} (${lang}) from ${source}...`));
-  await clone(source, repoDir);
-
-  const baselineSha = await headSha(repoDir);
-  console.log(chalk.dim(`Baseline commit: ${baselineSha}`));
-
-  await ensureHiIgnored(repoDir);
+  const baselineSha = await telemetry.phase("CLONE", async () => {
+    if (existsSync(repoDir)) {
+      // namedError so this lands as errorKind "DirectoryExists" — a user-environment condition, not a
+      // setup-pipeline failure, and the dashboard shouldn't count it against the real failure rate.
+      throw namedError(
+        "DirectoryExists",
+        `Directory ${chalk.bold(dirName)} already exists. Remove it or start in a clean location.`,
+      );
+    }
+    console.log(chalk.cyan(`Cloning seed for ${task} (${lang}) from ${source}...`));
+    await clone(source, repoDir);
+    const sha = await headSha(repoDir);
+    console.log(chalk.dim(`Baseline commit: ${sha}`));
+    await ensureHiIgnored(repoDir);
+    return sha;
+  });
 
   const runtime = getRuntime(lang);
   const label = LANG_LABEL[lang];
@@ -160,9 +201,9 @@ async function bootstrap(args: {
     ),
   );
   console.log(chalk.dim("  Re-run with --verbose to see everything.\n"));
-  await runtime.provision(repoDir);
+  await telemetry.phase("PROVISION", () => runtime.provision(repoDir));
 
-  const baseline = await runBaselineTests(runtime, repoDir);
+  const baseline = await telemetry.phase("BASELINE_TESTS", () => runBaselineTests(runtime, repoDir));
   if (!baseline.passed) {
     console.log(
       chalk.red(
@@ -172,7 +213,7 @@ async function bootstrap(args: {
     );
   }
 
-  return { repoDir, dirName, baselineSha };
+  return { repoDir, dirName, baselineSha, baseline: { passed: baseline.passed, output: baseline.output } };
 }
 
 // Baseline run during start: quiet ✓/✗ on the happy path (test output is noise here), with the full

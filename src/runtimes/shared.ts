@@ -54,11 +54,15 @@ function envWithLocalBin(): NodeJS.ProcessEnv {
 export class RunError extends Error {
   readonly output: string;
   readonly exitCode: number | null;
-  constructor(output: string, exitCode: number | null) {
+  // The command that failed (e.g. `uv sync`). Carried so start telemetry can point at the exact step
+  // that broke, which is almost always a provisioning command.
+  readonly command: string;
+  constructor(output: string, exitCode: number | null, command: string) {
     super(`command exited with code ${exitCode ?? "unknown"}`);
     this.name = "RunError";
     this.output = output;
     this.exitCode = exitCode;
+    this.command = command;
   }
 }
 
@@ -72,7 +76,7 @@ export async function runCaptured(command: string, args: string[], cwd: string):
   }
   const result = await execa(command, args, { cwd, all: true, reject: false, env: envWithLocalBin() });
   if (result.exitCode !== 0) {
-    throw new RunError(result.all ?? "", result.exitCode ?? null);
+    throw new RunError(result.all ?? "", result.exitCode ?? null, `${command} ${args.join(" ")}`.trim());
   }
 }
 

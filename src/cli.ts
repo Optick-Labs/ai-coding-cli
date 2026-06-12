@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { CLI_VERSION } from "./version.js";
 import { chatCommand } from "./commands/chat.js";
 import { devCommand } from "./commands/dev.js";
 import { recordCommand } from "./commands/record.js";
@@ -14,7 +15,7 @@ async function main(): Promise<void> {
   program
     .name("byoe")
     .description("Local coding-practice bootstrap CLI for Hello Interview")
-    .version("0.1.0");
+    .version(CLI_VERSION);
 
   program
     .command("start")
