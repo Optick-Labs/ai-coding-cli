@@ -20,5 +20,7 @@ export interface Runtime {
   // unbounded run during local iteration.
   runTests(repoDir: string, timeoutMs?: number): Promise<TestResult>;
   // The resolved command to start the project's dev server. The caller injects `PORT` into the env.
-  devCommand(): { command: string; args: string[] };
+  // Receives the repo dir so a runtime can resolve a per-seed entrypoint (e.g. the C# startup project,
+  // whose name differs per problem) instead of hardcoding one seed's layout.
+  devCommand(repoDir: string): { command: string; args: string[] };
 }

@@ -21,7 +21,7 @@ export async function ensureMise(): Promise<void> {
 // and test commands.
 export function createMiseRuntime(
   lang: Lang,
-  opts: { install?: string[]; test: string[]; dev: string[] },
+  opts: { install?: string[]; test: string[]; dev: string[] | ((repoDir: string) => string[]) },
 ): Runtime {
   return {
     lang,
@@ -43,8 +43,9 @@ export function createMiseRuntime(
     async runTests(repoDir: string, timeoutMs?: number): Promise<TestResult> {
       return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir, timeoutMs);
     },
-    devCommand() {
-      return { command: resolveBin("mise"), args: ["exec", "--", ...opts.dev] };
+    devCommand(repoDir: string) {
+      const dev = typeof opts.dev === "function" ? opts.dev(repoDir) : opts.dev;
+      return { command: resolveBin("mise"), args: ["exec", "--", ...dev] };
     },
   };
 }

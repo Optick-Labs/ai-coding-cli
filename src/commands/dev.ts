@@ -48,7 +48,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.log(chalk.yellow(`Port ${requested} is busy — using ${port} instead.`));
   }
 
-  const { command, args } = runtime.devCommand();
+  const { command, args } = runtime.devCommand(repoDir);
   console.log(chalk.bold.green(`\nDev server: http://127.0.0.1:${port}`));
   console.log(chalk.dim("Press Ctrl+C to stop.\n"));
 
