@@ -44,11 +44,15 @@ export function resolveBin(binary: string): string {
 
 function envWithLocalBin(): NodeJS.ProcessEnv {
   const local = localBinDir();
-  const existing = process.env.PATH ?? "";
-  return {
-    ...process.env,
-    PATH: existing.includes(local) ? existing : `${local}:${existing}`,
-  };
+  // Strip the session token before handing the env to any subprocess: provisioning/test commands run
+  // untrusted seed code, and the piped `curl | sh` installers run third-party scripts. None of them
+  // have any business seeing the bearer token. `--token`/`--token-stdin` never reach the environment;
+  // `HI_TOKEN` does, so drop it here so it can't be read (or exfiltrated) by a child.
+  const env = { ...process.env };
+  delete env.HI_TOKEN;
+  const existing = env.PATH ?? "";
+  env.PATH = existing.includes(local) ? existing : `${local}:${existing}`;
+  return env;
 }
 
 // Carries the captured output of a failed command so a step can surface it for debugging.

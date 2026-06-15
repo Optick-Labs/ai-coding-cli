@@ -22,31 +22,74 @@ export interface StartOptions {
 }
 
 // Read a single line from stdin for `--token-stdin`. Resumes the paused stdin stream and resolves on
-// the first newline or EOF, so `echo <token> | ai-coding start --token-stdin` works.
-function readTokenFromStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
+// the first newline (so an interactive paste + Enter proceeds immediately) or on EOF (so a piped
+// `pbpaste | byoe start --token-stdin` works). A backstop timeout keeps it from hanging forever if a
+// TTY is left open with no input. Listeners are always torn down so stdin doesn't keep the loop alive.
+const STDIN_TOKEN_TIMEOUT_MS = 30_000;
+function readTokenFromStdin(timeoutMs = STDIN_TOKEN_TIMEOUT_MS): Promise<string> {
+  return new Promise((resolveLine, reject) => {
+    const stdin = process.stdin;
     let data = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk: string) => {
+    let settled = false;
+
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      stdin.off("data", onData);
+      stdin.off("end", onEnd);
+      stdin.off("error", onError);
+      stdin.pause();
+    };
+    const finish = (line: string): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolveLine(line.trim());
+    };
+    const fail = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+
+    const onData = (chunk: string): void => {
       data += chunk;
-    });
-    process.stdin.on("end", () => resolve((data.split(/\r?\n/)[0] ?? "").trim()));
-    process.stdin.on("error", reject);
+      const nl = data.search(/\r?\n/);
+      if (nl !== -1) finish(data.slice(0, nl));
+    };
+    const onEnd = (): void => finish(data.split(/\r?\n/)[0] ?? "");
+    const onError = (err: Error): void => fail(err);
+    const timer = setTimeout(
+      () => fail(new Error("--token-stdin timed out waiting for a token on stdin.")),
+      timeoutMs,
+    );
+
+    stdin.setEncoding("utf8");
+    stdin.on("data", onData);
+    stdin.on("end", onEnd);
+    stdin.on("error", onError);
+    stdin.resume();
   });
 }
 
+type ResolvedToken =
+  | { token: string; source: "flag" | "stdin" | "env" }
+  | { token: undefined; source: "none" };
+
 // Resolve the session token, preferring the least-exposed source: an explicit --token, then
-// --token-stdin, then the HI_TOKEN env var. Returns undefined when none is set (offline mode).
-async function resolveToken(options: StartOptions): Promise<string | undefined> {
+// --token-stdin, then the HI_TOKEN env var. Carries the source so the caller can tell an explicit
+// online request from an ambient env var. Returns no token when none is set (offline mode).
+async function resolveToken(options: StartOptions): Promise<ResolvedToken> {
   const flag = options.token?.trim();
-  if (flag) return flag;
+  if (flag) return { token: flag, source: "flag" };
   if (options.tokenStdin) {
     const fromStdin = await readTokenFromStdin();
-    if (fromStdin) return fromStdin;
+    if (fromStdin) return { token: fromStdin, source: "stdin" };
     throw new Error("--token-stdin was set but no token was read from stdin.");
   }
   const fromEnv = process.env.HI_TOKEN?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+  if (fromEnv && fromEnv.length > 0) return { token: fromEnv, source: "env" };
+  return { token: undefined, source: "none" };
 }
 
 function assertLang(lang: string): Lang {
@@ -71,9 +114,17 @@ async function ensureHiIgnored(repoDir: string): Promise<void> {
 
 export async function startCommand(taskArg: string | undefined, options: StartOptions): Promise<void> {
   setVerbose(!!options.verbose);
-  const token = await resolveToken(options);
-  if (token) {
-    await startOnline(token, options.seed);
+  const resolved = await resolveToken(options);
+  if (resolved.token) {
+    // A task arg or --lang signals offline intent. If the only token came from an ambient HI_TOKEN,
+    // don't silently go online and burn a real session clock — make the user resolve the conflict.
+    if (resolved.source === "env" && (taskArg || options.lang)) {
+      throw new Error(
+        "HI_TOKEN is set (online mode) but you also passed offline arguments (a task and/or --lang). " +
+          "Unset HI_TOKEN to run offline, or drop the task/--lang to start an online session.",
+      );
+    }
+    await startOnline(resolved.token, options.seed);
     return;
   }
 

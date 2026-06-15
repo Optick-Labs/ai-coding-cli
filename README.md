@@ -82,7 +82,7 @@ This package is published to the public npm registry as `@hellointerview/ai-codi
 Publish with the guided script, from the repo root:
 
 ```
-yarn publish:cli
+yarn publish:ai-coding-cli
 ```
 
 You must be logged in to npm (`npm login`) as a member of the `@hellointerview` org, with your 2FA/OTP ready. The script walks the whole release safely:

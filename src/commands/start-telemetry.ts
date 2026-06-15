@@ -79,8 +79,9 @@ export class StartTelemetry {
     if (existsSync(markerPath)) return;
     console.error(
       chalk.dim(
-        "Sending anonymous setup diagnostics (OS, Node/CLI version, and any failure output) to " +
-          "hellointerview.com to debug provisioning. Opt out anytime with HI_TELEMETRY=0 or DO_NOT_TRACK=1.",
+        "Sending setup diagnostics (OS, Node/CLI version, and any failure output) to hellointerview.com " +
+          "to debug provisioning. They're linked to your session; the session token itself is stripped " +
+          "from the report. Opt out anytime with HI_TELEMETRY=0 or DO_NOT_TRACK=1.",
       ),
     );
     try {
