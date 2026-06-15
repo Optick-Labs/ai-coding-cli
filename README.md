@@ -77,29 +77,19 @@ Note: the link is tied to the Node version that was active when you ran it. If y
 
 ## Publishing (maintainers)
 
-This package is published to the public npm registry as `@hellointerview/ai-coding` (a scoped, public package — `publishConfig.access` is set to `public`). Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
+This package is published to the public npm registry as `@hellointerview/ai-coding` (a scoped, public package — `publishConfig.access` is `public`). Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
 
-1. Bump the version in `package.json`. The `--version` string is injected from it at build time (see `tsup.config.ts`), so there's nothing else to keep in sync. npm publishes are effectively permanent and `npx @hellointerview/ai-coding` always grabs the latest, so treat each publish as a release.
-2. Build the bundle:
-   ```
-   cd packages/cli && yarn install --immutable && yarn build
-   ```
-3. Inspect exactly what will ship — confirm it's only `README.md`, `LICENSE`, `dist/cli.js`, `package.json`:
-   ```
-   cd packages/cli && npm pack --dry-run
-   ```
-4. Smoke-test the packed artifact in isolation before publishing:
-   ```
-   cd packages/cli && npm pack
-   npx ./hellointerview-ai-coding-<version>.tgz --help
-   npx ./hellointerview-ai-coding-<version>.tgz start --help
-   ```
-5. Publish (must be logged in to an npm account that's a member of the `@hellointerview` org; have your 2FA/OTP ready). `publishConfig.access` is already set to `public`:
-   ```
-   npm login
-   cd packages/cli && npm publish
-   ```
-6. Confirm it's live from a clean directory:
-   ```
-   npx @hellointerview/ai-coding@latest --help
-   ```
+Publish with the guided script, from the repo root:
+
+```
+yarn publish:cli
+```
+
+You must be logged in to npm (`npm login`) as a member of the `@hellointerview` org, with your 2FA/OTP ready. The script walks the whole release safely:
+
+1. Checks you're authenticated and that `packages/cli` has no uncommitted changes (a published version should map to a commit).
+2. Shows the current vs. on-npm version and lets you keep it (first release) or bump patch/minor/major/explicit. It refuses to reuse a version already on npm.
+3. Builds a clean bundle and prints exactly what will ship, aborting unless it's precisely the four expected files (`LICENSE`, `README.md`, `dist/cli.js`, `package.json`).
+4. Requires you to **type the version** to confirm, then runs `npm publish --access public` (npm prompts for your OTP here). If you abort or it fails, any version bump it made is rolled back.
+
+The CLI's `--version` is injected from `package.json` at build time (see `tsup.config.ts`), so the version lives in exactly one place. After a publish that bumped the version, commit the `package.json` change. Verify a release from a clean directory with `npx @hellointerview/ai-coding@latest --help`.
