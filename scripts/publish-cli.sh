@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Interactive publisher for @hellointerview/ai-coding.
-# Run from the repo root: `yarn publish:cli`
+# Run from the repo root: `yarn publish:ai-coding`
 #
 # It is deliberately careful — nothing irreversible happens without an explicit,
 # typed confirmation, and npm versions are immutable so it refuses to clobber one.
