@@ -56,10 +56,10 @@ Teammates with the repo can get a global `ai-coding` command that points at thei
 One-time setup, from the repo root:
 
 ```
-yarn link:ai-coding-cli
+yarn link:ai-coding
 ```
 
-That installs the CLI's deps (it lives outside the root workspaces, so it needs its own install), builds it, and links a global `ai-coding` onto your PATH. Now `ai-coding` runs from any directory. The command is a symlink back into `packages/cli/dist`, so it tracks the repo — pull, rebuild, and the global `ai-coding` reflects the latest code. It's safe to re-run `yarn link:ai-coding-cli` anytime; it just repoints the same link.
+That installs the CLI's deps (it lives outside the root workspaces, so it needs its own install), builds it, and links a global `ai-coding` onto your PATH. Now `ai-coding` runs from any directory. The command is a symlink back into `packages/cli/dist`, so it tracks the repo — pull, rebuild, and the global `ai-coding` reflects the latest code. It's safe to re-run `yarn link:ai-coding` anytime; it just repoints the same link.
 
 While actively editing the CLI, run a watch build so every save rebuilds:
 
@@ -70,10 +70,10 @@ cd packages/cli && yarn dev
 To remove the global command:
 
 ```
-yarn unlink:ai-coding-cli
+yarn unlink:ai-coding
 ```
 
-Note: the link is tied to the Node version that was active when you ran it. If you switch Node versions (nvm), re-run `yarn link:ai-coding-cli` under the new one.
+Note: the link is tied to the Node version that was active when you ran it. If you switch Node versions (nvm), re-run `yarn link:ai-coding` under the new one.
 
 ## Publishing (maintainers)
 
@@ -82,7 +82,7 @@ This package is published to the public npm registry as `@hellointerview/ai-codi
 Publish with the guided script, from the repo root:
 
 ```
-yarn publish:ai-coding-cli
+yarn publish:ai-coding
 ```
 
 You must be logged in to npm (`npm login`) as a member of the `@hellointerview` org, with your 2FA/OTP ready. The script walks the whole release safely:

@@ -3,9 +3,7 @@
   "version": "0.1.0",
   "description": "Local coding-practice bootstrap CLI for Hello Interview",
   "type": "module",
-  "bin": {
-    "ai-coding": "dist/cli.js"
-  },
+  "bin": "dist/cli.js",
   "files": [
     "dist"
   ],

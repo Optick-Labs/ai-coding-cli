@@ -23,7 +23,7 @@ export interface StartOptions {
 
 // Read a single line from stdin for `--token-stdin`. Resumes the paused stdin stream and resolves on
 // the first newline (so an interactive paste + Enter proceeds immediately) or on EOF (so a piped
-// `pbpaste | byoe start --token-stdin` works). A backstop timeout keeps it from hanging forever if a
+// `pbpaste | ai-coding start --token-stdin` works). A backstop timeout keeps it from hanging if a
 // TTY is left open with no input. Listeners are always torn down so stdin doesn't keep the loop alive.
 const STDIN_TOKEN_TIMEOUT_MS = 30_000;
 function readTokenFromStdin(timeoutMs = STDIN_TOKEN_TIMEOUT_MS): Promise<string> {
