@@ -114,7 +114,10 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
       });
     }
 
-    const { repoDir, dirName, baselineSha, baseline } = await bootstrap({ task: remote.task, lang, source }, telemetry);
+    const { repoDir, dirName, baselineSha, baseline } = await bootstrap(
+      { task: remote.task, repoName: remote.repoName, lang, source },
+      telemetry,
+    );
 
     console.log(chalk.cyan("\nStarting session clock..."));
     const clock = await telemetry.phase("START_CLOCK", () => startSessionClock(base, token));
@@ -168,11 +171,11 @@ function printFailureHint(): void {
 }
 
 async function bootstrap(
-  args: { task: string; lang: Lang; source: string },
+  args: { task: string; repoName?: string; lang: Lang; source: string },
   telemetry: StartTelemetry,
 ): Promise<{ repoDir: string; dirName: string; baselineSha: string; baseline: { passed: boolean; output: string } }> {
-  const { task, lang, source } = args;
-  const dirName = `${task}-${lang}`;
+  const { task, repoName, lang, source } = args;
+  const dirName = `${repoName || task}-${lang}`;
   const repoDir = resolve(process.cwd(), dirName);
 
   const baselineSha = await telemetry.phase("CLONE", async () => {

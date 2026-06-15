@@ -10,6 +10,9 @@ export function apiBaseUrl(override?: string): string {
 export interface RemoteSession {
   id: string;
   task: string;
+  // Folder name to clone into, matching the problem the candidate sees (e.g. "schedulr"). Optional so an
+  // older server that doesn't send it still works — the CLI falls back to the task slug.
+  repoName?: string;
   language: Lang;
   startedAt: string | null;
   deadline: string | null;
