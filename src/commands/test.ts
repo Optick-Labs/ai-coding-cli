@@ -14,7 +14,7 @@ export async function testCommand(): Promise<void> {
     );
     console.log(
       chalk.dim(
-        "Run your project's own tests however you like. `npx @hellointerview/byoe submit` captures everything you've written.",
+        "Run your project's own tests however you like. `npx @hellointerview/ai-coding submit` captures everything you've written.",
       ),
     );
     return;

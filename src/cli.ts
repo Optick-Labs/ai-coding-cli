@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const program = new Command();
 
   program
-    .name("byoe")
+    .name("ai-coding")
     .description("Local coding-practice bootstrap CLI for Hello Interview")
     .version(CLI_VERSION);
 

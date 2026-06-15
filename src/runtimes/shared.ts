@@ -174,10 +174,10 @@ export function spawnStreaming(
   });
 }
 
-// Capture a test run without printing — callers decide how to surface it (full output for `byoe test`
+// Capture a test run without printing — callers decide how to surface it (full output for `ai-coding test`
 // and `submit`, a quiet ✓/✗ for the baseline run during `start`). Unbounded by default; pass
 // `timeoutMs` only where a hang would block something (the submit path), so a runaway suite is killed
-// and reported as a clean timeout instead of stalling. Other call sites (start, `byoe test`) stay
+// and reported as a clean timeout instead of stalling. Other call sites (start, `ai-coding test`) stay
 // unbounded — a candidate iterating locally can take as long as they want.
 export async function runTestsCapture(
   command: string,

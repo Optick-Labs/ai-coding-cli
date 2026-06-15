@@ -22,7 +22,7 @@ export interface StartOptions {
 }
 
 // Read a single line from stdin for `--token-stdin`. Resumes the paused stdin stream and resolves on
-// the first newline or EOF, so `echo <token> | byoe start --token-stdin` works.
+// the first newline or EOF, so `echo <token> | ai-coding start --token-stdin` works.
 function readTokenFromStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = "";
@@ -288,7 +288,7 @@ async function runBaselineTests(runtime: Runtime, repoDir: string) {
   return result;
 }
 
-// Every seed app binds 127.0.0.1 on PORT (default 8080); `byoe dev` honors that and
+// Every seed app binds 127.0.0.1 on PORT (default 8080); `ai-coding dev` honors that and
 // auto-picks a free port if it's taken. Kept as a single constant so this can't go stale per-language.
 const APP_PORT = 8080;
 
@@ -359,12 +359,12 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
     );
   } else {
     console.log(`  ${chalk.dim("Then start working. Common commands:")}`);
-    console.log(`    ${chalk.bold("npx @hellointerview/byoe test").padEnd(40)} ${chalk.dim("# run the tests")}`);
+    console.log(`    ${chalk.bold("npx @hellointerview/ai-coding test").padEnd(40)} ${chalk.dim("# run the tests")}`);
     console.log(
-      `    ${chalk.bold("npx @hellointerview/byoe dev").padEnd(40)} ${chalk.dim(`# start the app (http://127.0.0.1:${APP_PORT})`)}`,
+      `    ${chalk.bold("npx @hellointerview/ai-coding dev").padEnd(40)} ${chalk.dim(`# start the app (http://127.0.0.1:${APP_PORT})`)}`,
     );
   }
 
   console.log(chalk.cyan(`\nWhen you're done, from inside ${dirName}:`));
-  console.log(chalk.bold("  npx @hellointerview/byoe submit"));
+  console.log(chalk.bold("  npx @hellointerview/ai-coding submit"));
 }

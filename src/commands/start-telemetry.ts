@@ -9,7 +9,7 @@ import { CLI_VERSION } from "../version.js";
 const SEND_TIMEOUT_MS = 2500;
 const MAX_OUTPUT_TAIL = 8_000;
 const MAX_ERROR_MESSAGE = 2_000;
-const LOCAL_LOG = "byoe-start-debug.log";
+const LOCAL_LOG = "ai-coding-start-debug.log";
 
 // Operational telemetry is opt-out: honor an explicit HI_TELEMETRY=0 or the cross-tool DO_NOT_TRACK
 // convention. Only gates the network report, never the local debug log (that one helps the user).
@@ -20,7 +20,7 @@ function telemetryDisabled(): boolean {
 // One-time marker so the telemetry notice shows once per machine, not every run.
 function telemetryAckPath(): string {
   const base = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
-  return join(base, "hellointerview-byoe", "telemetry-ack");
+  return join(base, "hellointerview-ai-coding", "telemetry-ack");
 }
 
 // Scrub anything we wouldn't want in a telemetry payload or the local debug log: the user's home dir
@@ -187,7 +187,7 @@ export class StartTelemetry {
 
   private async writeLocalLog(payload: ByoeStartDiagnosticPayload): Promise<void> {
     const lines = [
-      `[${new Date().toISOString()}] byoe start failed`,
+      `[${new Date().toISOString()}] ai-coding start failed`,
       `phase: ${payload.phase}  kind: ${payload.errorKind ?? "(none)"}`,
       `cli: ${payload.cliVersion}  node: ${payload.nodeVersion}  os: ${payload.os} ${payload.arch}`,
       payload.errorCommand ? `command: ${payload.errorCommand}` : null,

@@ -1,18 +1,27 @@
 {
-  "name": "@hellointerview/byoe",
+  "name": "@hellointerview/ai-coding",
   "version": "0.1.0",
   "description": "Local coding-practice bootstrap CLI for Hello Interview",
   "type": "module",
   "bin": {
-    "byoe": "./dist/cli.js"
+    "ai-coding": "dist/cli.js"
   },
   "files": [
     "dist"
   ],
-  "license": "SEE LICENSE IN LICENSE",
-  "homepage": "https://www.hellointerview.com",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Optick-Labs/ai-coding-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Optick-Labs/ai-coding-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Optick-Labs/ai-coding-cli/issues"
+  },
+  "author": "Optick Labs Inc. (Hello Interview)",
   "keywords": [
     "hello-interview",
+    "ai-coding",
     "byoe",
     "interview",
     "coding-practice",
@@ -27,8 +36,8 @@
   "scripts": {
     "build": "tsup src/cli.ts --format esm --clean",
     "dev": "tsup src/cli.ts --format esm --watch",
-    "link:byoe": "yarn build && npm link",
-    "unlink:byoe": "npm rm -g @hellointerview/byoe"
+    "link:ai-coding": "yarn build && npm link",
+    "unlink:ai-coding": "npm rm -g @hellointerview/ai-coding"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.5.2",

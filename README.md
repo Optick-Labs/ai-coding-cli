@@ -1,4 +1,4 @@
-# @hellointerview/byoe
+# @hellointerview/ai-coding
 
 The local CLI for Hello Interview coding practice. It clones your session's starter repo, sets up the runtime, runs a timed session, and bundles your work for submission. Everything runs on your own machine.
 
@@ -9,7 +9,7 @@ Requires **Node.js 22+**. No install needed — run it with `npx`.
 Start a session using the token from your session page on hellointerview.com:
 
 ```
-npx @hellointerview/byoe start --token <token>
+npx @hellointerview/ai-coding start --token <token>
 ```
 
 Your timer starts when you run `start`, not when the token is minted.
@@ -17,19 +17,19 @@ Your timer starts when you run `start`, not when the token is minted.
 Check time remaining and what's changed since the starting point:
 
 ```
-npx @hellointerview/byoe status
+npx @hellointerview/ai-coding status
 ```
 
 Bundle your diff, re-run the tests, and finalize the session:
 
 ```
-npx @hellointerview/byoe submit
+npx @hellointerview/ai-coding submit
 ```
 
 ## Options
 
 - `--token <token>` — session token from hellointerview.com (required for a real session).
-- `--token-stdin` — read the token from stdin instead, e.g. `pbpaste | npx @hellointerview/byoe start --token-stdin`. Keeps the token out of your shell history and process list.
+- `--token-stdin` — read the token from stdin instead, e.g. `pbpaste | npx @hellointerview/ai-coding start --token-stdin`. Keeps the token out of your shell history and process list.
 - `--lang <python|java|typescript|go|csharp|any>` — language for offline mode.
 - `--seed <url-or-path>` — override the starter repo source (offline / dev).
 
@@ -49,17 +49,17 @@ Everything happens locally on your machine. A few things are worth calling out e
 - **Background recorder.** `start` spawns a detached helper that snapshots your progress every 2 minutes so your debrief can reference how you built things. It writes only to a private `refs/hi/timeline` ref and the gitignored `.hi/` folder — never your HEAD, branch, or staged changes. It stops when you `submit` and self-terminates after the deadline.
 - **Toolchain install.** For a managed-runtime task, if `uv` (Python) or `mise` (other languages) isn't already installed, `start` runs that tool's official install script (pinned to a known version) into an isolated location under `~/.local`. It won't change your system runtime or global PATH. Tools you already have installed are reused as-is.
 
-## Local development (run `byoe` from anywhere)
+## Local development (run `ai-coding` from anywhere)
 
-Teammates with the repo can get a global `byoe` command that points at their local source, so changes show up without publishing anything.
+Teammates with the repo can get a global `ai-coding` command that points at their local source, so changes show up without publishing anything.
 
 One-time setup, from the repo root:
 
 ```
-yarn link:byoe-cli
+yarn link:ai-coding-cli
 ```
 
-That installs the CLI's deps (it lives outside the root workspaces, so it needs its own install), builds it, and links a global `byoe` onto your PATH. Now `byoe` runs from any directory. The command is a symlink back into `packages/cli/dist`, so it tracks the repo — pull, rebuild, and the global `byoe` reflects the latest code. It's safe to re-run `yarn link:byoe-cli` anytime; it just repoints the same link.
+That installs the CLI's deps (it lives outside the root workspaces, so it needs its own install), builds it, and links a global `ai-coding` onto your PATH. Now `ai-coding` runs from any directory. The command is a symlink back into `packages/cli/dist`, so it tracks the repo — pull, rebuild, and the global `ai-coding` reflects the latest code. It's safe to re-run `yarn link:ai-coding-cli` anytime; it just repoints the same link.
 
 While actively editing the CLI, run a watch build so every save rebuilds:
 
@@ -70,16 +70,16 @@ cd packages/cli && yarn dev
 To remove the global command:
 
 ```
-yarn unlink:byoe-cli
+yarn unlink:ai-coding-cli
 ```
 
-Note: the link is tied to the Node version that was active when you ran it. If you switch Node versions (nvm), re-run `yarn link:byoe-cli` under the new one.
+Note: the link is tied to the Node version that was active when you ran it. If you switch Node versions (nvm), re-run `yarn link:ai-coding-cli` under the new one.
 
 ## Publishing (maintainers)
 
-This package is published to the public npm registry as `@hellointerview/byoe` (a scoped, public package — `publishConfig.access` is set to `public`). Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
+This package is published to the public npm registry as `@hellointerview/ai-coding` (a scoped, public package — `publishConfig.access` is set to `public`). Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
 
-1. Bump the version in `package.json`. The `--version` string is injected from it at build time (see `tsup.config.ts`), so there's nothing else to keep in sync. npm publishes are effectively permanent and `npx @hellointerview/byoe` always grabs the latest, so treat each publish as a release.
+1. Bump the version in `package.json`. The `--version` string is injected from it at build time (see `tsup.config.ts`), so there's nothing else to keep in sync. npm publishes are effectively permanent and `npx @hellointerview/ai-coding` always grabs the latest, so treat each publish as a release.
 2. Build the bundle:
    ```
    cd packages/cli && yarn install --immutable && yarn build
@@ -91,8 +91,8 @@ This package is published to the public npm registry as `@hellointerview/byoe` (
 4. Smoke-test the packed artifact in isolation before publishing:
    ```
    cd packages/cli && npm pack
-   npx ./hellointerview-byoe-<version>.tgz --help
-   npx ./hellointerview-byoe-<version>.tgz start --help
+   npx ./hellointerview-ai-coding-<version>.tgz --help
+   npx ./hellointerview-ai-coding-<version>.tgz start --help
    ```
 5. Publish (must be logged in to an npm account that's a member of the `@hellointerview` org; have your 2FA/OTP ready). `publishConfig.access` is already set to `public`:
    ```
@@ -101,5 +101,5 @@ This package is published to the public npm registry as `@hellointerview/byoe` (
    ```
 6. Confirm it's live from a clean directory:
    ```
-   npx @hellointerview/byoe@latest --help
+   npx @hellointerview/ai-coding@latest --help
    ```

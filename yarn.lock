@@ -187,9 +187,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hellointerview/byoe@workspace:.":
+"@hellointerview/ai-coding@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@hellointerview/byoe@workspace:."
+  resolution: "@hellointerview/ai-coding@workspace:."
   dependencies:
     "@inquirer/prompts": "npm:^8.5.2"
     "@types/node": "npm:^22.0.0"
@@ -199,7 +199,7 @@ __metadata:
     tsup: "npm:^8.3.0"
     typescript: "npm:^5.6.0"
   bin:
-    byoe: ./dist/cli.js
+    ai-coding: ./dist/cli.js
   languageName: unknown
   linkType: soft
 

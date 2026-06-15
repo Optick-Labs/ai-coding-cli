@@ -4,7 +4,7 @@ import type { Runtime, TestResult } from "./types.js";
 // tooling, so there's nothing for us to provision and no built-in test/dev runner. The command
 // handlers branch on `selfDirected` before ever touching these methods; runTests/devCommand throw
 // so a future call path that forgets the branch fails loudly instead of faking a green run.
-// `byoe submit` still captures the whole working tree as a diff.
+// `ai-coding submit` still captures the whole working tree as a diff.
 export const anyRuntime: Runtime = {
   lang: "any",
   selfDirected: true,
