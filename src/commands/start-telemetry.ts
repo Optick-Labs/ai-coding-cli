@@ -1,6 +1,8 @@
-import { appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { homedir, arch as osArch, platform, release } from "node:os";
+import chalk from "chalk";
 import { postByoeStartDiagnostic, type ByoeStartDiagnosticPayload, type ByoeStartPhase } from "../api.js";
 import { CLI_VERSION } from "../version.js";
 
@@ -15,11 +17,21 @@ function telemetryDisabled(): boolean {
   return process.env.HI_TELEMETRY === "0" || process.env.DO_NOT_TRACK === "1";
 }
 
-// Replace the user's home directory with ~ wherever it shows up in captured output or messages. Cheap
-// guard so a stray absolute path in a toolchain log doesn't leak a username off the machine.
-function redact(text: string): string {
+// One-time marker so the telemetry notice shows once per machine, not every run.
+function telemetryAckPath(): string {
+  const base = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
+  return join(base, "hellointerview-byoe", "telemetry-ack");
+}
+
+// Scrub anything we wouldn't want in a telemetry payload or the local debug log: the user's home dir
+// (→ ~, so a path can't leak a username), the session token, and credentials embedded in a URL.
+function redact(text: string, token?: string): string {
+  let out = text;
   const home = homedir();
-  return home ? text.split(home).join("~") : text;
+  if (home) out = out.split(home).join("~");
+  if (token && token.length > 0) out = out.split(token).join("***");
+  out = out.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/\s:@]+(?::[^/\s@]+)?@/g, "$1***@");
+  return out;
 }
 
 // An error with a specific telemetry kind. Use for failures that are the user's environment rather
@@ -58,6 +70,27 @@ export class StartTelemetry {
     this.online = Boolean(opts.token && opts.apiBaseUrl);
   }
 
+  // Print a one-time notice that operational telemetry is on, but only when we'd actually send it
+  // (online and not opted out). Marker-gated so repeat runs stay quiet; fails open — if the marker
+  // can't be read or written, we just show the notice again rather than going silent.
+  async announceOnce(): Promise<void> {
+    if (!this.online || telemetryDisabled()) return;
+    const markerPath = telemetryAckPath();
+    if (existsSync(markerPath)) return;
+    console.error(
+      chalk.dim(
+        "Sending anonymous setup diagnostics (OS, Node/CLI version, and any failure output) to " +
+          "hellointerview.com to debug provisioning. Opt out anytime with HI_TELEMETRY=0 or DO_NOT_TRACK=1.",
+      ),
+    );
+    try {
+      await mkdir(dirname(markerPath), { recursive: true });
+      await writeFile(markerPath, `${new Date().toISOString()}\n`, "utf8");
+    } catch {
+      // Can't persist the marker (read-only home, etc.) — fine, we'll just show the notice again.
+    }
+  }
+
   async phase<T>(phase: ByoeStartPhase, fn: () => Promise<T>): Promise<T> {
     this.furthest = phase;
     const startedAt = Date.now();
@@ -86,7 +119,7 @@ export class StartTelemetry {
       errorMessage: "seed baseline tests failed at start",
       errorCommand: null,
       exitCode: null,
-      outputTail: output.trim() ? redact(output).slice(-MAX_OUTPUT_TAIL) : null,
+      outputTail: output.trim() ? redact(output, this.opts.token).slice(-MAX_OUTPUT_TAIL) : null,
       ...this.base(),
     });
   }
@@ -122,15 +155,15 @@ export class StartTelemetry {
       const isApiError = e.name === "ApiError" && typeof e.status === "number";
       return {
         errorKind: isApiError ? `ApiError:${e.status}` : e.name || "Error",
-        errorMessage: redact(e.message).slice(0, MAX_ERROR_MESSAGE),
-        errorCommand: e.command ? redact(e.command).slice(0, 200) : null,
+        errorMessage: redact(e.message, this.opts.token).slice(0, MAX_ERROR_MESSAGE),
+        errorCommand: e.command ? redact(e.command, this.opts.token).slice(0, 200) : null,
         exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
-        outputTail: isRunError && e.output ? redact(e.output).slice(-MAX_OUTPUT_TAIL) : null,
+        outputTail: isRunError && e.output ? redact(e.output, this.opts.token).slice(-MAX_OUTPUT_TAIL) : null,
       };
     }
     return {
       errorKind: "Unknown",
-      errorMessage: redact(String(error)).slice(0, MAX_ERROR_MESSAGE),
+      errorMessage: redact(String(error), this.opts.token).slice(0, MAX_ERROR_MESSAGE),
       errorCommand: null,
       exitCode: null,
       outputTail: null,

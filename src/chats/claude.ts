@@ -82,30 +82,34 @@ export const claudeReader: ChatReader = {
       (name) => name === repoPrefix || name.startsWith(`${repoPrefix}-`),
     );
 
+    // Carry whether each file came from the exact-name folder (vs a lossy `${prefix}-…` sibling). A
+    // cwd-less log can only be trusted from the exact folder.
     const files = (
       await Promise.all(
         projectDirs.map(async (name) => {
           const dir = join(projectsRoot, name);
+          const exactDir = name === repoPrefix;
           const jsonl = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith(".jsonl"));
-          return jsonl.map((f) => join(dir, f));
+          return jsonl.map((f) => ({ path: join(dir, f), exactDir }));
         }),
       )
     ).flat();
 
+    type StatFile = { path: string; exactDir: boolean; mtimeMs: number; byteSize: number };
     // Isolate each stat so one bad file (rotated mid-scan, stray symlink, permission edge) drops out
     // instead of rejecting the whole discovery.
     const withStats = (
       await Promise.all(
-        files.map(async (path) => {
+        files.map(async ({ path, exactDir }) => {
           try {
             const s = await stat(path);
-            return { path, mtimeMs: s.mtimeMs, byteSize: s.size };
+            return { path, exactDir, mtimeMs: s.mtimeMs, byteSize: s.size };
           } catch {
             return null;
           }
         }),
       )
-    ).filter((f): f is { path: string; mtimeMs: number; byteSize: number } => f !== null);
+    ).filter((f): f is StatFile => f !== null);
     withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
     const chats: DiscoveredChat[] = [];
@@ -119,8 +123,13 @@ export const claudeReader: ChatReader = {
       const { cwd, title, messageCount } = inspect(raw);
       if (messageCount === 0) continue;
       // The folder name is lossy; the cwd stamped in the log is ground truth. When present, require
-      // the repo itself or a subdirectory. Older logs without a cwd fall back to the folder match.
-      if (cwd && cwd !== repoDir && !cwd.startsWith(`${repoDir}/`)) continue;
+      // the repo itself or a subdirectory. A cwd-less log (older format) is only trusted from the
+      // exact-name folder — never from a `${prefix}-…` sibling, which may be an unrelated repo.
+      if (cwd) {
+        if (cwd !== repoDir && !cwd.startsWith(`${repoDir}/`)) continue;
+      } else if (!file.exactDir) {
+        continue;
+      }
       chats.push({
         provider: "CLAUDE",
         title,

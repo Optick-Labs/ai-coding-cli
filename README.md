@@ -29,12 +29,25 @@ npx @hellointerview/byoe submit
 ## Options
 
 - `--token <token>` — session token from hellointerview.com (required for a real session).
-- `--lang <python|java>` — language for offline mode.
+- `--token-stdin` — read the token from stdin instead, e.g. `pbpaste | npx @hellointerview/byoe start --token-stdin`. Keeps the token out of your shell history and process list.
+- `--lang <python|java|typescript|go|csharp|any>` — language for offline mode.
 - `--seed <url-or-path>` — override the starter repo source (offline / dev).
 
 ## Environment
 
 - `HI_API_URL` — override the API base (defaults to `https://www.hellointerview.com`).
+- `HI_TOKEN` — supply the session token via the environment instead of `--token`.
+- `HI_TELEMETRY=0` or `DO_NOT_TRACK=1` — turn off setup diagnostics (see Privacy below).
+- `HI_TRANSFER_TIMEOUT_MS` — timeout for seed/artifact/chat transfers (defaults to 120000).
+
+## Privacy & what runs on your machine
+
+Everything happens locally on your machine. A few things are worth calling out explicitly:
+
+- **Setup diagnostics (opt-out).** When you run `start` against a real session, the CLI reports the outcome to hellointerview.com so we can fix provisioning failures: your OS, architecture, Node and CLI version, per-phase timings, and — only on failure — the error and up to 8 KB of the failing command's output. Your home directory is rewritten to `~` and the session token is stripped before anything is sent. It's best-effort and never blocks setup. Turn it off with `HI_TELEMETRY=0` or `DO_NOT_TRACK=1`. Offline sessions report nothing.
+- **AI chat capture (you choose).** `submit` (and the standalone `chat` command) look for Claude Code and Codex session logs that belong to this repo — under `~/.claude/projects` and `~/.codex/sessions`, matched by the working directory recorded in each log — and let you pick which, if any, to upload to your grader. Nothing uploads without your selection. Override the search roots with `CLAUDE_CONFIG_DIR` / `CODEX_HOME`.
+- **Background recorder.** `start` spawns a detached helper that snapshots your progress every 2 minutes so your debrief can reference how you built things. It writes only to a private `refs/hi/timeline` ref and the gitignored `.hi/` folder — never your HEAD, branch, or staged changes. It stops when you `submit` and self-terminates after the deadline.
+- **Toolchain install.** For a managed-runtime task, if `uv` (Python) or `mise` (other languages) isn't already installed, `start` runs that tool's official install script (pinned to a known version) into an isolated location under `~/.local`. It won't change your system runtime or global PATH. Tools you already have installed are reused as-is.
 
 ## Local development (run `byoe` from anywhere)
 
@@ -66,7 +79,7 @@ Note: the link is tied to the Node version that was active when you ran it. If y
 
 This package is published to the public npm registry as `@hellointerview/byoe` (a scoped, public package — `publishConfig.access` is set to `public`). Only `dist/` ships (see `files`), and runtime deps are installed by npm when the package is fetched.
 
-1. Bump the version in `package.json` (and the `--version` string in `src/cli.ts` if you keep them in sync). npm publishes are effectively permanent and `npx @hellointerview/byoe` always grabs the latest, so treat each publish as a release.
+1. Bump the version in `package.json`. The `--version` string is injected from it at build time (see `tsup.config.ts`), so there's nothing else to keep in sync. npm publishes are effectively permanent and `npx @hellointerview/byoe` always grabs the latest, so treat each publish as a release.
 2. Build the bundle:
    ```
    cd packages/cli && yarn install --immutable && yarn build

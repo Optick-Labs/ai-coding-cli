@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "description": "Local coding-practice bootstrap CLI for Hello Interview",
   "type": "module",
-  "bin": "./dist/cli.js",
+  "bin": {
+    "byoe": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "homepage": "https://www.hellointerview.com",
   "keywords": [
     "hello-interview",

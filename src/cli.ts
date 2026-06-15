@@ -22,13 +22,14 @@ async function main(): Promise<void> {
     .description("Clone a seed repo, provision the runtime, and start a timed session")
     .argument("[task]", "task slug for offline mode (e.g. booking); omit when using --token")
     .option("--token <token>", "session token from hellointerview.com")
+    .option("--token-stdin", "read the session token from stdin (keeps it out of shell history)")
     .option("--lang <lang>", "language: python | java | typescript | go | csharp | any (offline mode)")
     .option("--seed <url-or-path>", "override seed repo source (offline mode)")
     .option("--verbose", "show full runtime provisioning output")
     .action(
       async (
         task: string | undefined,
-        options: { token?: string; lang?: string; seed?: string; verbose?: boolean },
+        options: { token?: string; tokenStdin?: boolean; lang?: string; seed?: string; verbose?: boolean },
       ) => {
         await startCommand(task, options);
       },

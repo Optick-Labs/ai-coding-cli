@@ -69,22 +69,30 @@ export class RunError extends Error {
 
 // Run a command capturing its output. In --verbose mode it streams straight through; otherwise the
 // output is buffered and only surfaced (via RunError) when the command fails, so provisioning stays
-// quiet on the happy path.
-export async function runCaptured(command: string, args: string[], cwd: string): Promise<void> {
+// quiet on the happy path. `envOverrides` is merged on top of the local-bin PATH env (used to pin the
+// toolchain installer version, e.g. MISE_VERSION).
+export async function runCaptured(
+  command: string,
+  args: string[],
+  cwd: string,
+  envOverrides?: NodeJS.ProcessEnv,
+): Promise<void> {
+  const env = { ...envWithLocalBin(), ...envOverrides };
   if (isVerbose()) {
-    await execa(command, args, { cwd, stdio: "inherit", env: envWithLocalBin() });
+    await execa(command, args, { cwd, stdio: "inherit", env });
     return;
   }
-  const result = await execa(command, args, { cwd, all: true, reject: false, env: envWithLocalBin() });
+  const result = await execa(command, args, { cwd, all: true, reject: false, env });
   if (result.exitCode !== 0) {
     throw new RunError(result.all ?? "", result.exitCode ?? null, `${command} ${args.join(" ")}`.trim());
   }
 }
 
 // Bootstrap a toolchain manager (uv / mise) by piping its official install script into sh. Captured
-// like any other step unless --verbose.
-export async function installScript(scriptUrl: string): Promise<void> {
-  await runCaptured("sh", ["-c", `curl -LsSf ${scriptUrl} | sh`], process.cwd());
+// like any other step unless --verbose. `envOverrides` reaches the piped sh, so an installer that
+// reads a version env var (mise.run honors MISE_VERSION) gets a pinned version instead of latest.
+export async function installScript(scriptUrl: string, envOverrides?: NodeJS.ProcessEnv): Promise<void> {
+  await runCaptured("sh", ["-c", `curl -LsSf ${scriptUrl} | sh`], process.cwd(), envOverrides);
 }
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

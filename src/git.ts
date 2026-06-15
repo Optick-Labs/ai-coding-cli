@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { execa } from "execa";
 
 export async function clone(source: string, dest: string): Promise<void> {
-  await execa("git", ["clone", source, dest], { stdio: "inherit" });
+  // `--` ends option parsing so a source that begins with `-` (e.g. a stray `--upload-pack=...`) is
+  // treated as the repository, never as a git flag.
+  await execa("git", ["clone", "--", source, dest], { stdio: "inherit" });
 }
 
 export async function headSha(repoDir: string): Promise<string> {

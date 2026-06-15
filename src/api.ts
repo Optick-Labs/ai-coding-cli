@@ -3,6 +3,13 @@ import type { Lang } from "./session.js";
 
 const DEFAULT_API = "https://www.hellointerview.com";
 
+// Bounds the bulk seed/artifact/chat transfers so a stalled socket can't hang the CLI forever.
+// Generous (and overridable) so a slow-but-live connection on a big bundle isn't cut off.
+function transferTimeoutMs(): number {
+  const override = Number.parseInt(process.env.HI_TRANSFER_TIMEOUT_MS ?? "", 10);
+  return Number.isInteger(override) && override > 0 ? override : 120_000;
+}
+
 export function apiBaseUrl(override?: string): string {
   return override ?? process.env.HI_API_URL ?? DEFAULT_API;
 }
@@ -94,7 +101,7 @@ export async function fetchSeedUrl(base: string, token: string): Promise<{ url: 
 }
 
 export async function downloadBundle(url: string, destPath: string): Promise<void> {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(transferTimeoutMs()) });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`seed download failed (${res.status})${text ? `: ${text}` : ""}`);
@@ -208,6 +215,7 @@ export async function uploadChatRaw(url: string, filePath: string): Promise<void
     method: "PUT",
     body,
     headers: { "Content-Type": "application/x-ndjson" },
+    signal: AbortSignal.timeout(transferTimeoutMs()),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -229,6 +237,7 @@ export async function uploadBundle(url: string, filePath: string): Promise<void>
     method: "PUT",
     body,
     headers: { "Content-Type": "application/octet-stream" },
+    signal: AbortSignal.timeout(transferTimeoutMs()),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

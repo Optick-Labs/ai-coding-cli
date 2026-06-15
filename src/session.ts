@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 
@@ -25,6 +25,14 @@ export interface FoundSession {
 
 const SESSION_FILE = "session.json";
 
+// The session file holds the bearer token, so it's owner-only. `mode` on writeFile applies on
+// creation; the explicit chmod covers an overwrite of a pre-existing, looser-permissioned file.
+// chmod is best-effort (a no-op on filesystems that don't support it).
+async function writeSessionFile(path: string, session: Session): Promise<void> {
+  await writeFile(path, JSON.stringify(session, null, 2) + "\n", { encoding: "utf8", mode: 0o600 });
+  await chmod(path, 0o600).catch(() => undefined);
+}
+
 function hiDirFor(repoDir: string): string {
   return join(repoDir, ".hi");
 }
@@ -37,7 +45,7 @@ export async function writeSession(repoDir: string, session: Session): Promise<s
   const hiDir = hiDirFor(repoDir);
   await mkdir(hiDir, { recursive: true });
   const path = sessionPathFor(repoDir);
-  await writeFile(path, JSON.stringify(session, null, 2) + "\n", "utf8");
+  await writeSessionFile(path, session);
   return path;
 }
 
@@ -79,8 +87,9 @@ export async function updateSession(
   repoDir: string,
   patch: Partial<Session>,
 ): Promise<Session> {
-  const raw = await readFile(sessionPathFor(repoDir), "utf8");
+  const path = sessionPathFor(repoDir);
+  const raw = await readFile(path, "utf8");
   const session = { ...(JSON.parse(raw) as Session), ...patch };
-  await writeFile(sessionPathFor(repoDir), JSON.stringify(session, null, 2) + "\n", "utf8");
+  await writeSessionFile(path, session);
   return session;
 }

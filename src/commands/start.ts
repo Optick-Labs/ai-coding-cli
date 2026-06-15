@@ -15,9 +15,38 @@ const DEADLINE_MINUTES = 60;
 
 export interface StartOptions {
   token?: string;
+  tokenStdin?: boolean;
   lang?: string;
   seed?: string;
   verbose?: boolean;
+}
+
+// Read a single line from stdin for `--token-stdin`. Resumes the paused stdin stream and resolves on
+// the first newline or EOF, so `echo <token> | byoe start --token-stdin` works.
+function readTokenFromStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk: string) => {
+      data += chunk;
+    });
+    process.stdin.on("end", () => resolve((data.split(/\r?\n/)[0] ?? "").trim()));
+    process.stdin.on("error", reject);
+  });
+}
+
+// Resolve the session token, preferring the least-exposed source: an explicit --token, then
+// --token-stdin, then the HI_TOKEN env var. Returns undefined when none is set (offline mode).
+async function resolveToken(options: StartOptions): Promise<string | undefined> {
+  const flag = options.token?.trim();
+  if (flag) return flag;
+  if (options.tokenStdin) {
+    const fromStdin = await readTokenFromStdin();
+    if (fromStdin) return fromStdin;
+    throw new Error("--token-stdin was set but no token was read from stdin.");
+  }
+  const fromEnv = process.env.HI_TOKEN?.trim();
+  return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
 }
 
 function assertLang(lang: string): Lang {
@@ -42,8 +71,9 @@ async function ensureHiIgnored(repoDir: string): Promise<void> {
 
 export async function startCommand(taskArg: string | undefined, options: StartOptions): Promise<void> {
   setVerbose(!!options.verbose);
-  if (options.token) {
-    await startOnline(options.token, options.seed);
+  const token = await resolveToken(options);
+  if (token) {
+    await startOnline(token, options.seed);
     return;
   }
 
@@ -92,6 +122,7 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
 async function startOnline(token: string, seedOverride?: string): Promise<void> {
   const base = apiBaseUrl();
   const telemetry = new StartTelemetry({ token, apiBaseUrl: base });
+  await telemetry.announceOnce();
   let tempSeedDir: string | undefined;
 
   try {

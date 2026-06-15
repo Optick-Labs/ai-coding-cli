@@ -2,9 +2,14 @@ import type { Lang } from "../session.js";
 import type { Runtime, TestResult } from "./types.js";
 import { onPath, resolveBin, runTestsCapture, installScript, runCaptured, step, LANG_LABEL } from "./shared.js";
 
+// Pinned so a fresh install gets a known, reviewed mise rather than whatever is latest the day a
+// candidate runs it. The mise.run script honors MISE_VERSION. Only affects machines without mise
+// already on PATH. Bump periodically.
+const MISE_VERSION = "v2026.6.10";
+
 export async function ensureMise(): Promise<void> {
   if (await onPath("mise")) return;
-  await installScript("https://mise.run");
+  await installScript("https://mise.run", { MISE_VERSION });
   if (!(await onPath("mise"))) {
     throw new Error("mise install completed but mise is still not on PATH (~/.local/bin).");
   }
