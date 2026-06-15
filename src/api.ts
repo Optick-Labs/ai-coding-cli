@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import chalk from "chalk";
 import type { Lang } from "./session.js";
 
 const DEFAULT_API = "https://www.hellointerview.com";
@@ -10,8 +11,43 @@ function transferTimeoutMs(): number {
   return Number.isInteger(override) && override > 0 ? override : 120_000;
 }
 
+function isLoopback(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
+// Resolves the control-plane base URL, defaulting to production. An override (flag or HI_API_URL) is
+// honored for staging/local dev, but guarded: the bearer token rides on every request, so we refuse to
+// send it over plaintext http to anywhere but loopback, and we warn loudly if a poisoned environment
+// has redirected it off hellointerview.com. A bad URL fails fast instead of silently misbehaving.
 export function apiBaseUrl(override?: string): string {
-  return override ?? process.env.HI_API_URL ?? DEFAULT_API;
+  const raw = (override ?? process.env.HI_API_URL ?? DEFAULT_API).trim();
+  if (!raw || raw === DEFAULT_API) return DEFAULT_API;
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`Invalid API base URL "${raw}". Set HI_API_URL to a full https:// URL.`);
+  }
+
+  const loopback = isLoopback(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error(
+      `Refusing to use insecure API base URL "${raw}". The session token is only sent over https:// ` +
+        `(http:// is allowed for localhost only).`,
+    );
+  }
+
+  const host = url.hostname.toLowerCase();
+  if (host !== "hellointerview.com" && !host.endsWith(".hellointerview.com") && !loopback) {
+    console.error(
+      chalk.yellow(
+        `⚠  HI_API_URL points at ${url.host}, not hellointerview.com — your session token will be sent there.`,
+      ),
+    );
+  }
+
+  return raw.replace(/\/+$/, "");
 }
 
 export interface RemoteSession {

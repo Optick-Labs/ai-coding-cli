@@ -1,6 +1,8 @@
-import { lstat, mkdir, open, readFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, rm } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
-import { dirname, join, parse } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
+import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 
 export const LANGS = ["python", "java", "typescript", "go", "csharp", "any"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -25,16 +27,18 @@ export interface FoundSession {
 
 const SESSION_FILE = "session.json";
 
-// O_NOFOLLOW where the platform supports it (0 elsewhere, e.g. Windows) so opening the session file
+// O_NOFOLLOW where the platform supports it (0 elsewhere, e.g. Windows) so opening a file we own
 // fails instead of following a symlink. Stops a seed repo that ships `.hi/session.json` as a symlink
-// from redirecting the bearer-token write outside the repo.
+// from redirecting our write outside the repo.
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
-// The session file holds the bearer token, so it's owner-only and never written through a symlink.
-// The open mode applies on creation; the explicit chmod covers an overwrite of a pre-existing,
-// looser-permissioned file. chmod is best-effort (a no-op on filesystems that don't support it).
-async function writeSessionFile(path: string, session: Session): Promise<void> {
-  const data = JSON.stringify(session, null, 2) + "\n";
+// Auth material (bearer token + the API base it's valid for) is the secret part of a session.
+type Credentials = Pick<Session, "token" | "apiBaseUrl">;
+
+// Owner-only, never written through a symlink. The open mode applies on creation; the explicit chmod
+// covers an overwrite of a pre-existing, looser-permissioned file. chmod is best-effort (a no-op on
+// filesystems that don't support it).
+async function writeProtectedFile(path: string, data: string): Promise<void> {
   const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | O_NOFOLLOW;
   const handle = await open(path, flags, 0o600);
   try {
@@ -43,6 +47,43 @@ async function writeSessionFile(path: string, session: Session): Promise<void> {
   } finally {
     await handle.close();
   }
+}
+
+// Everything in the session except the secret auth fields — this is what's safe to persist inside the
+// cloned exercise repo (which contains server-provided code the candidate runs).
+function withoutSecrets(session: Session): Omit<Session, "token" | "apiBaseUrl"> {
+  const { token: _token, apiBaseUrl: _apiBaseUrl, ...rest } = session;
+  return rest;
+}
+
+// The token is deliberately kept OUT of the cloned repo. That repo holds server-provided code the
+// candidate runs (`test`/`dev`/build scripts, dependencies), so a token sitting in `.hi/session.json`
+// could be read and exfiltrated by any of it. Instead it lives under the user's own config dir, 0600,
+// in a file keyed by a hash of the repo path.
+function credentialsDir(): string {
+  const base = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
+  return join(base, "hellointerview-ai-coding", "credentials");
+}
+
+function credentialsPathFor(repoDir: string): string {
+  const key = createHash("sha256").update(resolve(repoDir)).digest("hex").slice(0, 32);
+  return join(credentialsDir(), `${key}.json`);
+}
+
+async function writeCredentials(repoDir: string, creds: Credentials): Promise<void> {
+  await mkdir(credentialsDir(), { recursive: true });
+  await writeProtectedFile(credentialsPathFor(repoDir), JSON.stringify(creds, null, 2) + "\n");
+}
+
+async function readCredentials(repoDir: string): Promise<Credentials | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(credentialsPathFor(repoDir), "utf8")) as Partial<Credentials>;
+    if (parsed.token && parsed.apiBaseUrl) return { token: parsed.token, apiBaseUrl: parsed.apiBaseUrl };
+  } catch {
+    // No stored credentials (offline session, moved repo, or a legacy session created before tokens
+    // moved out of the repo). Callers fall back to whatever the repo file carries.
+  }
+  return undefined;
 }
 
 // Create `.hi` for the session, refusing to write through a symlinked `.hi` planted by a seed repo
@@ -68,7 +109,10 @@ function sessionPathFor(repoDir: string): string {
 export async function writeSession(repoDir: string, session: Session): Promise<string> {
   await ensureHiDir(repoDir);
   const path = sessionPathFor(repoDir);
-  await writeSessionFile(path, session);
+  await writeProtectedFile(path, JSON.stringify(withoutSecrets(session), null, 2) + "\n");
+  if (session.token && session.apiBaseUrl) {
+    await writeCredentials(repoDir, { token: session.token, apiBaseUrl: session.apiBaseUrl });
+  }
   return path;
 }
 
@@ -92,7 +136,11 @@ export async function findSession(startDir: string): Promise<FoundSession> {
     const candidate = sessionPathFor(current);
     if (existsSync(candidate)) {
       const raw = await readFile(candidate, "utf8");
-      const session = JSON.parse(raw) as Session;
+      const fileSession = JSON.parse(raw) as Session;
+      // Secrets live in the out-of-repo credentials store; the store wins, but fall back to a token
+      // embedded in the repo file so sessions created by an older CLI still work.
+      const creds = await readCredentials(current);
+      const session: Session = creds ? { ...fileSession, ...creds } : fileSession;
       return { session, hiDir: hiDirFor(current), repoDir: current };
     }
     if (current === root) break;
@@ -112,7 +160,13 @@ export async function updateSession(
 ): Promise<Session> {
   const path = sessionPathFor(repoDir);
   const raw = await readFile(path, "utf8");
-  const session = { ...(JSON.parse(raw) as Session), ...patch };
-  await writeSessionFile(path, session);
+  // Re-merge secrets from the store (or a legacy file token) so we never strip a still-needed token,
+  // and re-persist them through writeCredentials — which migrates a legacy session to the secure store.
+  const creds = await readCredentials(repoDir);
+  const session: Session = { ...(JSON.parse(raw) as Session), ...patch, ...(creds ?? {}) };
+  await writeProtectedFile(path, JSON.stringify(withoutSecrets(session), null, 2) + "\n");
+  if (session.token && session.apiBaseUrl) {
+    await writeCredentials(repoDir, { token: session.token, apiBaseUrl: session.apiBaseUrl });
+  }
   return session;
 }

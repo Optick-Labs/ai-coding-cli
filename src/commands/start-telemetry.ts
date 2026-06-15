@@ -23,14 +23,48 @@ function telemetryAckPath(): string {
   return join(base, "hellointerview-ai-coding", "telemetry-ack");
 }
 
+// Env var names whose values we treat as secret.
+const SECRET_ENV_KEY = /(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|API[_-]?KEY|APIKEY|AUTH)/i;
+
+// `KEY=value` / `"KEY": "value"` where KEY looks sensitive — the usual shape when a process dumps its
+// config or environment. Redacts the value, keeps the key so the log still says what leaked.
+const SECRET_ASSIGNMENT =
+  /\b([A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|API[_-]?KEY|APIKEY|AUTH)[A-Za-z0-9_]*)(\s*[:=]\s*)("?)([^\s"']+)\3/gi;
+
+// Common secret token shapes, redacted even when they didn't originate from our own environment (e.g.
+// printed out of a file a command read). Conservative so ordinary output isn't mangled.
+const SECRET_PATTERNS: RegExp[] = [
+  /\b(?:sk|rk)-[A-Za-z0-9_-]{16,}\b/g,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bAIza[0-9A-Za-z_-]{30,}\b/g,
+  /-----BEGIN[ A-Z]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z]*PRIVATE KEY-----/g,
+];
+
+// Redact the values of secret-looking env vars actually present in this process — a failing child
+// command (a seed test, a dependency install script) can echo the environment it inherited.
+function redactEnvSecrets(text: string): string {
+  let out = text;
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!value || value.length < 6 || !SECRET_ENV_KEY.test(key)) continue;
+    out = out.split(value).join("***");
+  }
+  return out;
+}
+
 // Scrub anything we wouldn't want in a telemetry payload or the local debug log: the user's home dir
-// (→ ~, so a path can't leak a username), the session token, and credentials embedded in a URL.
+// (→ ~, so a path can't leak a username), the session token, credentials embedded in a URL, and any
+// secret-shaped env values or tokens a failing command might have printed.
 function redact(text: string, token?: string): string {
   let out = text;
   const home = homedir();
   if (home) out = out.split(home).join("~");
   if (token && token.length > 0) out = out.split(token).join("***");
   out = out.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/\s:@]+(?::[^/\s@]+)?@/g, "$1***@");
+  out = redactEnvSecrets(out);
+  out = out.replace(SECRET_ASSIGNMENT, (_m, key, sep, quote) => `${key}${sep}${quote}***${quote}`);
+  for (const re of SECRET_PATTERNS) out = out.replace(re, "***");
   return out;
 }
 

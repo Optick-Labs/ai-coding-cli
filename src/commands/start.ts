@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { appendFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve, join } from "node:path";
+import { resolve, join, basename } from "node:path";
 import chalk from "chalk";
 import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClock } from "../api.js";
 import { resolveSeed } from "../seeds.js";
@@ -97,6 +97,16 @@ function assertLang(lang: string): Lang {
   // Named for telemetry: online, this fires when the server hands back a language this build doesn't
   // know — i.e. an outdated CLI — which is worth seeing as its own bucket, not a generic Error.
   throw namedError("UnsupportedLanguage", `language must be one of ${LANGS.join(", ")} (got "${lang}").`);
+}
+
+// The clone folder is named from server- or user-supplied strings (`repoName`/`task`). Constrain it to
+// a single safe path segment so a value like "../../evil" can't redirect the clone outside the cwd.
+function safeDirSegment(value: string): string {
+  const segment = basename(value.trim());
+  if (!segment || segment === "." || segment === ".." || !/^[A-Za-z0-9._-]+$/.test(segment)) {
+    throw namedError("InvalidRepoName", `Refusing unsafe session folder name "${value}".`);
+  }
+  return segment;
 }
 
 async function ensureHiIgnored(repoDir: string): Promise<void> {
@@ -257,7 +267,7 @@ async function bootstrap(
   telemetry: StartTelemetry,
 ): Promise<{ repoDir: string; dirName: string; baselineSha: string; baseline?: { passed: boolean; output: string } }> {
   const { task, repoName, lang, source } = args;
-  const dirName = `${repoName || task}-${lang}`;
+  const dirName = `${safeDirSegment(repoName || task)}-${lang}`;
   const repoDir = resolve(process.cwd(), dirName);
 
   const baselineSha = await telemetry.phase("CLONE", async () => {
