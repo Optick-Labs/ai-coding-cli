@@ -80,7 +80,7 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
       }),
     );
 
-    if (baseline.passed) await telemetry.success();
+    if (!baseline || baseline.passed) await telemetry.success();
     else await telemetry.baselineFailed(baseline.output);
   } catch (error) {
     await telemetry.failure(error);
@@ -149,7 +149,7 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
       );
     }
 
-    if (baseline.passed) await telemetry.success();
+    if (!baseline || baseline.passed) await telemetry.success();
     else await telemetry.baselineFailed(baseline.output);
   } catch (error) {
     await telemetry.failure(error);
@@ -173,7 +173,7 @@ function printFailureHint(): void {
 async function bootstrap(
   args: { task: string; repoName?: string; lang: Lang; source: string },
   telemetry: StartTelemetry,
-): Promise<{ repoDir: string; dirName: string; baselineSha: string; baseline: { passed: boolean; output: string } }> {
+): Promise<{ repoDir: string; dirName: string; baselineSha: string; baseline?: { passed: boolean; output: string } }> {
   const { task, repoName, lang, source } = args;
   const dirName = `${repoName || task}-${lang}`;
   const repoDir = resolve(process.cwd(), dirName);
