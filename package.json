@@ -32,6 +32,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "prepublishOnly": "yarn build",
     "build": "tsup src/cli.ts --format esm --clean",
     "dev": "tsup src/cli.ts --format esm --watch",
     "link:ai-coding": "yarn build && npm link",
