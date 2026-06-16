@@ -1,7 +1,8 @@
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdtemp, stat, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import chalk from "chalk";
 import type { ChatReader, DiscoveredChat } from "./types.js";
 
 // Cursor doesn't write per-chat files like Claude Code or Codex. Every conversation lives in one big
@@ -54,6 +55,41 @@ function cursorGlobalDb(): string {
   return join(base, "User", "globalStorage", "state.vscdb");
 }
 
+// node:sqlite imports without a CLI flag only on Node 22.13.0+ (earlier 22.x throws unless launched
+// with --experimental-sqlite, which npx doesn't pass). When a Cursor DB is present but the import
+// fails, the candidate has Cursor history we simply can't read — tell them why instead of silently
+// claiming "no chats found". Printed at most once, and only to an interactive terminal.
+let warnedUnavailable = false;
+function warnCursorUnavailable(): void {
+  if (warnedUnavailable) return;
+  warnedUnavailable = true;
+  if (!process.stdout.isTTY) return;
+  console.log(
+    chalk.dim(
+      "Found Cursor history, but reading it needs Node 22.13 or newer (you're on an older Node). Upgrade Node, or paste your chat from the session page.",
+    ),
+  );
+}
+
+// Unlike the Claude/Codex readers (which hand the uploader the real on-disk log), Cursor has no per-chat
+// file, so we materialize each conversation into a temp file. That file holds the candidate's verbatim
+// chat content, so it goes in a private per-run dir (`mkdtemp` is 0700) instead of a predictable shared
+// path, and the whole dir is removed when the process exits — chat content shouldn't linger in /tmp.
+let cachedOutDir: string | null = null;
+async function ensureOutDir(): Promise<string> {
+  if (cachedOutDir) return cachedOutDir;
+  const dir = await mkdtemp(join(tmpdir(), "hi-ai-coding-chats-"));
+  process.once("exit", () => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort — a leftover temp dir is harmless, and exit handlers can't do much else
+    }
+  });
+  cachedOutDir = dir;
+  return dir;
+}
+
 // Cap the conversations we materialize — a heavy Cursor user accumulates thousands, and the picker only
 // ever surfaces the latest handful.
 const MAX_MATCHES = 15;
@@ -73,6 +109,14 @@ function compact(value: unknown, limit = MAX_TOOL_PREVIEW): string {
 // `\`, `%` and `_` are LIKE metacharacters — escape them so a repo path is matched literally.
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+// The temp filename embeds the composerId, which comes from the DB. Real Cursor ids are UUID-ish and
+// safe, but a corrupt value carrying path separators must never let us write outside the temp dir, so
+// strip it down to a conservative token.
+function safeFileToken(value: string): string {
+  const cleaned = value.replace(/[^A-Za-z0-9_-]/g, "");
+  return cleaned || "chat";
 }
 
 interface Turn {
@@ -118,14 +162,34 @@ function parseComposer(raw: string): ComposerMeta | null {
   };
 }
 
-// The composer's workspace is ground truth. Accept an exact match or either side being a parent — a
-// candidate may have opened the repo's parent folder, or a subfolder of it, in Cursor.
+// Cursor records the workspace either as an OS path (`fsPath`, e.g. `C:\Users\me\repo` on Windows) or
+// a URI path (`uri.path`, e.g. `/c:/Users/me/repo`, possibly percent-encoded). Bring both — and our
+// own repoDir — to one comparable shape so matching survives those format differences: drop a leading
+// `file://`, percent-decode, unify separators to `/`, strip the slash a URI puts before a drive
+// letter, drop a trailing slash, and lowercase on Windows (its filesystem is case-insensitive and
+// drive-letter casing varies). On POSIX we keep case, since the filesystem is case-sensitive.
+function normalizeForCompare(input: string): string {
+  let s = input.trim();
+  if (!s) return "";
+  s = s.replace(/^file:\/\//, "");
+  try {
+    s = decodeURIComponent(s);
+  } catch {
+    // not valid percent-encoding — compare it as-is
+  }
+  s = s.replace(/\\/g, "/").replace(/^\/([A-Za-z]:)/, "$1").replace(/\/+$/, "");
+  return platform() === "win32" ? s.toLowerCase() : s;
+}
+
+// The composer's workspace is ground truth. Match the sibling readers' convention (claude.ts /
+// codex.ts): a conversation counts only when its workspace IS the repo or sits INSIDE it (a candidate
+// may have opened a subfolder). We deliberately don't match a parent workspace — opening `~/dev`
+// shouldn't sweep in every unrelated repo under it.
 function workspaceCoversRepo(workspacePath: string, repoDir: string): boolean {
-  return (
-    workspacePath === repoDir ||
-    repoDir.startsWith(`${workspacePath}/`) ||
-    workspacePath.startsWith(`${repoDir}/`)
-  );
+  const ws = normalizeForCompare(workspacePath);
+  const repo = normalizeForCompare(repoDir);
+  if (!ws || !repo) return false;
+  return ws === repo || ws.startsWith(`${repo}/`);
 }
 
 function bubbleToTurn(raw: string): Turn | null {
@@ -164,6 +228,7 @@ export const cursorReader: ChatReader = {
     try {
       DatabaseSync = await loadDatabaseSync();
     } catch {
+      warnCursorUnavailable();
       return [];
     }
 
@@ -176,16 +241,18 @@ export const cursorReader: ChatReader = {
     }
 
     try {
-      // Narrow the 2k+ conversations down with a cheap LIKE on the repo path before parsing JSON. The
-      // path lands in each composer's workspaceIdentifier, so a freshly cloned problem dir matches only
-      // its own chats. The LIKE is just a filter; workspaceCoversRepo below is the authoritative check.
+      // Narrow the 2k+ conversations down with a cheap LIKE before parsing JSON. We filter on the repo
+      // folder's *basename*, not the full path: a single path segment has no separators, so it matches
+      // regardless of how Cursor stored the workspace (Windows `\`, which is doubled inside the stored
+      // JSON, or a `/c:/…` URI path). The LIKE is only a coarse filter; workspaceCoversRepo below does
+      // the authoritative, separator-aware match against the real workspace path.
       const candidates: ComposerMeta[] = [];
       try {
         const rows = db
           .prepare(
             "SELECT value FROM cursorDiskKV WHERE key LIKE 'composerData:%' AND value LIKE ? ESCAPE '\\'",
           )
-          .all(`%${escapeLike(repoDir)}%`) as unknown as DbRow[];
+          .all(`%${escapeLike(basename(repoDir))}%`) as unknown as DbRow[];
         for (const row of rows) {
           const meta = parseComposer(row.value);
           if (!meta || meta.headers.length === 0 || !meta.workspacePath) continue;
@@ -197,8 +264,7 @@ export const cursorReader: ChatReader = {
 
       candidates.sort((a, b) => b.createdAt - a.createdAt);
 
-      const outDir = join(tmpdir(), "hi-ai-coding-chats");
-      await mkdir(outDir, { recursive: true }).catch(() => undefined);
+      const outDir = await ensureOutDir();
 
       const bubbleStmt = db.prepare("SELECT value FROM cursorDiskKV WHERE key = ?");
       const chats: DiscoveredChat[] = [];
@@ -229,7 +295,7 @@ export const cursorReader: ChatReader = {
         if (messageCount === 0) continue;
 
         const ndjson = `${turns.map((t) => JSON.stringify(t)).join("\n")}\n`;
-        const outPath = join(outDir, `cursor-${meta.composerId}.jsonl`);
+        const outPath = join(outDir, `cursor-${safeFileToken(meta.composerId)}.jsonl`);
         try {
           await writeFile(outPath, ndjson, "utf8");
         } catch {
