@@ -1,10 +1,11 @@
 import { claudeReader } from "./claude.js";
 import { codexReader } from "./codex.js";
+import { cursorReader } from "./cursor.js";
 import type { ChatReader, DiscoveredChat } from "./types.js";
 
 export type { ChatProvider, DiscoveredChat } from "./types.js";
 
-const READERS: ChatReader[] = [claudeReader, codexReader];
+const READERS: ChatReader[] = [claudeReader, codexReader, cursorReader];
 
 // Discover AI chats from every supported tool for this repo, newest first. A reader that throws
 // (missing dir, permission error) contributes nothing rather than failing the whole discovery.

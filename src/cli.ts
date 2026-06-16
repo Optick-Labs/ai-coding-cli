@@ -66,7 +66,7 @@ async function main(): Promise<void> {
 
   program
     .command("chat")
-    .description("Attach AI chat logs (Claude Code, Codex) from this session")
+    .description("Attach AI chat logs (Claude Code, Codex, Cursor) from this session")
     .action(async () => {
       await chatCommand();
     });

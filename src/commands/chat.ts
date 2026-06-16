@@ -14,6 +14,7 @@ const MAX_CAPTURES = 20;
 const PROVIDER_LABEL: Record<DiscoveredChat["provider"], string> = {
   CLAUDE: "Claude",
   CODEX: "Codex",
+  CURSOR: "Cursor",
 };
 
 function humanAge(mtimeMs: number): string {
@@ -61,7 +62,7 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
   if (eligible.length === 0) {
     console.log(
       chalk.dim(
-        "No Claude Code or Codex chats found for this folder. If you used another tool (Cursor, ChatGPT, etc.), you can paste your chat from the session page in your browser.",
+        "No Claude Code, Codex, or Cursor chats found for this folder. If you used another tool (ChatGPT, etc.), you can paste your chat from the session page in your browser.",
       ),
     );
     return;

@@ -1,4 +1,4 @@
-export type ChatProvider = "CLAUDE" | "CODEX";
+export type ChatProvider = "CLAUDE" | "CODEX" | "CURSOR";
 
 export interface DiscoveredChat {
   provider: ChatProvider;

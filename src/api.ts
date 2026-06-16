@@ -164,7 +164,7 @@ export async function fetchChatUploadUrl(
 }
 
 export interface ChatCapturePayload {
-  provider: "CLAUDE" | "CODEX";
+  provider: "CLAUDE" | "CODEX" | "CURSOR";
   title: string | null;
   key: string;
   byteSize: number;
