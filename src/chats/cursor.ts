@@ -132,9 +132,36 @@ interface ConversationHeader {
 interface ComposerMeta {
   composerId: string;
   name: string | null;
-  workspacePath: string | null;
+  workspacePaths: string[];
   createdAt: number;
   headers: ConversationHeader[];
+}
+
+// Which project a chat belongs to has moved around across Cursor versions. Older builds stored it in
+// `workspaceIdentifier.uri`; newer ones drop that field entirely and instead record the git root in
+// `trackedGitRepos[].repoPath` and the `file://` URIs of edited files in `originalFileStates`. Gather
+// every path signal available — the match check only needs one of them to land at or inside the repo.
+function collectWorkspacePaths(obj: Record<string, unknown>): string[] {
+  const paths: string[] = [];
+
+  const ws = obj.workspaceIdentifier as { uri?: { fsPath?: unknown; path?: unknown } } | undefined;
+  const wsPath = ws?.uri?.fsPath ?? ws?.uri?.path;
+  if (typeof wsPath === "string" && wsPath) paths.push(wsPath);
+
+  const repos = Array.isArray(obj.trackedGitRepos) ? obj.trackedGitRepos : [];
+  for (const repo of repos) {
+    const repoPath = repo && typeof repo === "object" ? (repo as { repoPath?: unknown }).repoPath : undefined;
+    if (typeof repoPath === "string" && repoPath) paths.push(repoPath);
+  }
+
+  const fileStates = obj.originalFileStates;
+  if (fileStates && typeof fileStates === "object") {
+    for (const uri of Object.keys(fileStates)) {
+      if (uri) paths.push(uri);
+    }
+  }
+
+  return paths;
 }
 
 function parseComposer(raw: string): ComposerMeta | null {
@@ -151,12 +178,10 @@ function parseComposer(raw: string): ComposerMeta | null {
     .filter((h): h is Record<string, unknown> => !!h && typeof h === "object")
     .map((h) => ({ bubbleId: String(h.bubbleId ?? ""), type: num(h.type) }))
     .filter((h) => h.bubbleId);
-  const workspace = obj.workspaceIdentifier as { uri?: { fsPath?: unknown; path?: unknown } } | undefined;
-  const fsPath = workspace?.uri?.fsPath ?? workspace?.uri?.path;
   return {
     composerId,
     name: typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : null,
-    workspacePath: typeof fsPath === "string" ? fsPath : null,
+    workspacePaths: collectWorkspacePaths(obj),
     createdAt: num(obj.createdAt),
     headers,
   };
@@ -181,15 +206,17 @@ function normalizeForCompare(input: string): string {
   return platform() === "win32" ? s.toLowerCase() : s;
 }
 
-// The composer's workspace is ground truth. Match the sibling readers' convention (claude.ts /
-// codex.ts): a conversation counts only when its workspace IS the repo or sits INSIDE it (a candidate
-// may have opened a subfolder). We deliberately don't match a parent workspace — opening `~/dev`
-// shouldn't sweep in every unrelated repo under it.
-function workspaceCoversRepo(workspacePath: string, repoDir: string): boolean {
-  const ws = normalizeForCompare(workspacePath);
+// The conversation's own path signals are ground truth. It belongs to this repo when any signal — the
+// opened workspace, a tracked git root, or an edited file — lands AT the repo or INSIDE it. This
+// mirrors the sibling readers' convention (claude.ts / codex.ts): repo-or-below, never a parent, so
+// opening `~/dev` (or merely mentioning the repo name) doesn't sweep in unrelated conversations.
+function coversRepo(workspacePaths: string[], repoDir: string): boolean {
   const repo = normalizeForCompare(repoDir);
-  if (!ws || !repo) return false;
-  return ws === repo || ws.startsWith(`${repo}/`);
+  if (!repo) return false;
+  return workspacePaths.some((p) => {
+    const c = normalizeForCompare(p);
+    return !!c && (c === repo || c.startsWith(`${repo}/`));
+  });
 }
 
 function bubbleToTurn(raw: string): Turn | null {
@@ -243,9 +270,9 @@ export const cursorReader: ChatReader = {
     try {
       // Narrow the 2k+ conversations down with a cheap LIKE before parsing JSON. We filter on the repo
       // folder's *basename*, not the full path: a single path segment has no separators, so it matches
-      // regardless of how Cursor stored the workspace (Windows `\`, which is doubled inside the stored
-      // JSON, or a `/c:/…` URI path). The LIKE is only a coarse filter; workspaceCoversRepo below does
-      // the authoritative, separator-aware match against the real workspace path.
+      // regardless of how Cursor stored the path (Windows `\`, which is doubled inside the stored JSON,
+      // or a `/c:/…` URI path) and which field carries it. The LIKE is only a coarse filter; coversRepo
+      // below does the authoritative, separator-aware match against the conversation's real paths.
       const candidates: ComposerMeta[] = [];
       try {
         const rows = db
@@ -255,8 +282,8 @@ export const cursorReader: ChatReader = {
           .all(`%${escapeLike(basename(repoDir))}%`) as unknown as DbRow[];
         for (const row of rows) {
           const meta = parseComposer(row.value);
-          if (!meta || meta.headers.length === 0 || !meta.workspacePath) continue;
-          if (workspaceCoversRepo(meta.workspacePath, repoDir)) candidates.push(meta);
+          if (!meta || meta.headers.length === 0 || meta.workspacePaths.length === 0) continue;
+          if (coversRepo(meta.workspacePaths, repoDir)) candidates.push(meta);
         }
       } catch {
         return [];
