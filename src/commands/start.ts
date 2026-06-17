@@ -11,14 +11,28 @@ import { clone, headSha } from "../git.js";
 import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
 import { StartTelemetry, LOCAL_LOG_NAME, namedError } from "./start-telemetry.js";
 
-const DEADLINE_MINUTES = 60;
+// Offline mode has no server session to read a budget from, so it falls back to this. The online
+// (token) path always uses the server-issued deadline instead, which carries the task's own duration.
+const DEFAULT_DEADLINE_MINUTES = 60;
 
 export interface StartOptions {
   token?: string;
   tokenStdin?: boolean;
   lang?: string;
   seed?: string;
+  minutes?: string;
   verbose?: boolean;
+}
+
+// Parse the offline `--minutes` override. Defaults to one hour; rejects non-positive / non-numeric
+// input so a typo can't silently start a zero-minute (already-expired) session.
+function resolveOfflineDeadlineMinutes(raw?: string): number {
+  if (raw === undefined) return DEFAULT_DEADLINE_MINUTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`--minutes must be a positive number (got "${raw}").`);
+  }
+  return Math.round(parsed);
 }
 
 // Read a single line from stdin for `--token-stdin`. Resumes the paused stdin stream and resolves on
@@ -154,8 +168,9 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
   try {
     const { repoDir, dirName, baselineSha, baseline } = await bootstrap({ task: taskArg, lang, source }, telemetry);
 
+    const deadlineMinutes = resolveOfflineDeadlineMinutes(options.minutes);
     const startedAt = new Date();
-    const deadline = new Date(startedAt.getTime() + DEADLINE_MINUTES * 60_000);
+    const deadline = new Date(startedAt.getTime() + deadlineMinutes * 60_000);
     await telemetry.phase("FINALIZE", () =>
       finalize({
         repoDir,
@@ -164,7 +179,7 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
           task: taskArg,
           lang,
           startedAt: startedAt.toISOString(),
-          deadlineMinutes: DEADLINE_MINUTES,
+          deadlineMinutes,
           deadline: deadline.toISOString(),
           baselineSha,
         },

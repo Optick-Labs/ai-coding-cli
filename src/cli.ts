@@ -25,11 +25,12 @@ async function main(): Promise<void> {
     .option("--token-stdin", "read the session token from stdin (keeps it out of shell history)")
     .option("--lang <lang>", "language: python | java | typescript | go | csharp | any (offline mode)")
     .option("--seed <url-or-path>", "override seed repo source (offline mode)")
+    .option("--minutes <n>", "session length in minutes (offline mode; defaults to 60)")
     .option("--verbose", "show full runtime provisioning output")
     .action(
       async (
         task: string | undefined,
-        options: { token?: string; tokenStdin?: boolean; lang?: string; seed?: string; verbose?: boolean },
+        options: { token?: string; tokenStdin?: boolean; lang?: string; seed?: string; minutes?: string; verbose?: boolean },
       ) => {
         await startCommand(task, options);
       },
