@@ -204,6 +204,26 @@ export async function postByoeEvent(base: string, token: string, event: ByoeEven
   });
 }
 
+export interface ByoeCliEventPayload {
+  kind: "WRONG_DIRECTORY";
+  command?: string;
+  cliVersion?: string;
+  nodeVersion?: string;
+  os?: string;
+  arch?: string;
+}
+
+// Reports a CLI usability misfire (currently: a command run from outside the session folder). Distinct
+// from process events (TEST_RUN/DEV_SERVER) and start diagnostics. Best-effort, short timeout; the
+// caller swallows failures.
+export async function postByoeCliEvent(base: string, token: string, payload: ByoeCliEventPayload): Promise<void> {
+  await request(base, "/api/byoe/cli-event", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(2000),
+  });
+}
+
 export type ByoeStartPhase =
   | "RESOLVE_SESSION"
   | "DOWNLOAD_SEED"

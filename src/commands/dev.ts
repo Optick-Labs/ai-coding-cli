@@ -3,7 +3,7 @@ import { findSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
 import { spawnStreaming } from "../runtimes/shared.js";
 import { findFreePort, waitForPort } from "../net.js";
-import { pingEvent } from "./events.js";
+import { pingEvent, reportWrongDirectory } from "./events.js";
 
 const DEFAULT_PORT = 8080;
 // Generous so a cold JVM / dotnet build (Spring Boot, `dotnet run`) still binds before we give up —
@@ -28,7 +28,14 @@ function parsePort(raw: string | undefined): number {
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  const { session, repoDir } = await findSession(process.cwd());
+  let found;
+  try {
+    found = await findSession(process.cwd(), { command: "dev" });
+  } catch (error) {
+    await reportWrongDirectory(error, "dev");
+    throw error;
+  }
+  const { session, repoDir } = found;
   const runtime = getRuntime(session.lang);
 
   // Build-from-scratch tasks have no managed dev server — the candidate runs their app themselves.

@@ -9,6 +9,7 @@ import { resolveSeed } from "../seeds.js";
 import { getRuntime, setVerbose, isVerbose, startSpinner, LANG_LABEL, type Runtime } from "../runtimes/index.js";
 import { clone, headSha } from "../git.js";
 import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
+import { addSession } from "../registry.js";
 import { StartTelemetry, LOCAL_LOG_NAME, namedError } from "./start-telemetry.js";
 
 // Offline mode has no server session to read a budget from, so it falls back to this. The online
@@ -406,6 +407,15 @@ function spawnRecorder(repoDir: string): boolean {
 async function finalize(args: { repoDir: string; dirName: string; session: Session }): Promise<void> {
   const { repoDir, dirName, session } = args;
   await writeSession(repoDir, session);
+  // Record the session's location (non-secret locators only) so a later command run from the wrong
+  // folder can point the candidate back here. Best-effort — never blocks start.
+  await addSession({
+    repoDir,
+    task: session.task,
+    lang: session.lang,
+    startedAt: session.startedAt,
+    deadline: session.deadline,
+  });
   const recording = spawnRecorder(repoDir);
 
   const readme = ["README.md", "readme.md", "README"].find((f) => existsSync(join(repoDir, f)));

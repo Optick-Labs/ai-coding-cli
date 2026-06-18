@@ -4,8 +4,9 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { fetchArtifactUrl, fetchSession, postSubmit, uploadBundle, type SubmitResult } from "../api.js";
 import { captureChats } from "./chat.js";
-import { pingEvent } from "./events.js";
+import { pingEvent, reportWrongDirectory } from "./events.js";
 import { findSession, recorderPidPath, updateSession } from "../session.js";
+import { removeSession } from "../registry.js";
 import { getRuntime } from "../runtimes/index.js";
 import { diff, log, diffNameStatus, bundleSnapshot, snapshotCommit } from "../git.js";
 import { computeRemaining } from "../time.js";
@@ -13,6 +14,10 @@ import { computeRemaining } from "../time.js";
 // Cap the post-submission test re-run. The submission is already recorded by the time this runs, so
 // this only bounds how long we wait to show the candidate a local pass/fail before the CLI exits.
 const SUBMIT_TEST_TIMEOUT_MS = 20_000;
+
+// Server statuses past which a session can never go back to ACTIVE — safe to forget from the recovery
+// registry. A non-terminal non-active status (PENDING) stays discoverable.
+const TERMINAL_BYOE_STATUSES = new Set(["SUBMITTED", "DEBRIEFED", "ABANDONED"]);
 
 // Stop the background recorder before we snapshot so it can't run git concurrently with the submit.
 // Best-effort: a missing or dead recorder is the normal case for offline/already-finished sessions.
@@ -86,12 +91,22 @@ function printSessionNotActive(base: string, sessionId: string, status: string, 
 }
 
 export async function submitCommand(): Promise<void> {
-  const { session, hiDir, repoDir } = await findSession(process.cwd());
+  let found;
+  try {
+    found = await findSession(process.cwd(), { command: "submit" });
+  } catch (error) {
+    await reportWrongDirectory(error, "submit");
+    throw error;
+  }
+  const { session, hiDir, repoDir } = found;
 
   if (session.token && session.apiBaseUrl) {
     const remote = await fetchSession(session.apiBaseUrl, session.token);
     if (remote.status !== "ACTIVE") {
       printSessionNotActive(session.apiBaseUrl, remote.id, remote.status, remote.submittedAt);
+      // Drop the registry entry only for genuinely terminal states. A non-terminal non-active status
+      // (e.g. PENDING) is still recoverable, so leave it discoverable.
+      if (TERMINAL_BYOE_STATUSES.has(remote.status)) await removeSession(repoDir);
       return;
     }
   }
@@ -165,6 +180,8 @@ export async function submitCommand(): Promise<void> {
   }
 
   await updateSession(repoDir, { submittedAt: serverResult?.submittedAt ?? submittedAtDate.toISOString() });
+  // Submitted — remove it from the recovery registry so it won't show up as a place to cd into.
+  await removeSession(repoDir);
 
   console.log(chalk.bold.green("\nSubmission complete."));
   console.log(`Task:        ${session.task} (${session.lang})`);

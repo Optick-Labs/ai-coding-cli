@@ -13,7 +13,8 @@ const LOCAL_LOG = "ai-coding-start-debug.log";
 
 // Operational telemetry is opt-out: honor an explicit HI_TELEMETRY=0 or the cross-tool DO_NOT_TRACK
 // convention. Only gates the network report, never the local debug log (that one helps the user).
-function telemetryDisabled(): boolean {
+// Exported so other telemetry paths (e.g. the wrong-directory CLI event) honor the same policy.
+export function telemetryDisabled(): boolean {
   return process.env.HI_TELEMETRY === "0" || process.env.DO_NOT_TRACK === "1";
 }
 

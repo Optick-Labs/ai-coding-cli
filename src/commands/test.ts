@@ -1,10 +1,17 @@
 import chalk from "chalk";
 import { findSession } from "../session.js";
 import { getRuntime } from "../runtimes/index.js";
-import { pingEvent } from "./events.js";
+import { pingEvent, reportWrongDirectory } from "./events.js";
 
 export async function testCommand(): Promise<void> {
-  const { session, repoDir } = await findSession(process.cwd());
+  let found;
+  try {
+    found = await findSession(process.cwd(), { command: "test" });
+  } catch (error) {
+    await reportWrongDirectory(error, "test");
+    throw error;
+  }
+  const { session, repoDir } = found;
   const runtime = getRuntime(session.lang);
 
   // Build-from-scratch tasks have no managed test runner — the candidate uses their own tools.

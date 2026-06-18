@@ -151,6 +151,6 @@ export async function captureChats(session: Session, repoDir: string): Promise<v
 }
 
 export async function chatCommand(): Promise<void> {
-  const { session, repoDir } = await findSession(process.cwd());
+  const { session, repoDir } = await findSession(process.cwd(), { command: "chat" });
   await captureChats(session, repoDir);
 }

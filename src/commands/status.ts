@@ -28,7 +28,7 @@ async function recorderStatus(hiDir: string): Promise<{ alive: boolean; ticks: n
 }
 
 export async function statusCommand(): Promise<void> {
-  const { session, hiDir, repoDir } = await findSession(process.cwd());
+  const { session, hiDir, repoDir } = await findSession(process.cwd(), { command: "status" });
 
   let remaining: { overTime: boolean; label: string };
   if (session.token && session.apiBaseUrl) {
