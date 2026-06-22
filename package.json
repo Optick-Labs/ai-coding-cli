@@ -1,6 +1,6 @@
 {
   "name": "@hellointerview/ai-coding",
-  "version": "0.3.0",
+  "version": "0.2.2",
   "description": "Local coding-practice bootstrap CLI for Hello Interview",
   "type": "module",
   "bin": "dist/cli.js",
