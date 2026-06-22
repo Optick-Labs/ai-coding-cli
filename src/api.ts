@@ -225,6 +225,7 @@ export async function postByoeCliEvent(base: string, token: string, payload: Byo
 }
 
 export type ByoeStartPhase =
+  | "PREFLIGHT"
   | "RESOLVE_SESSION"
   | "DOWNLOAD_SEED"
   | "CLONE"
@@ -242,6 +243,9 @@ export interface ByoeStartDiagnosticPayload {
   errorMessage?: string | null;
   errorCommand?: string | null;
   exitCode?: number | null;
+  // The signal that killed the failing command, if any (e.g. "SIGKILL"). Distinct from exitCode, which
+  // is null on a signalled death — a SIGKILL during provisioning is the macOS endpoint-security failure.
+  signal?: string | null;
   outputTail?: string | null;
   cliVersion?: string;
   nodeVersion?: string;

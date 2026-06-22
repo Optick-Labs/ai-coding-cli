@@ -1,15 +1,11 @@
 import type { Runtime, TestResult } from "./types.js";
-import { onPath, resolveBin, runTestsCapture, installScript, runCaptured, step } from "./shared.js";
-
-// Pinned so a fresh install gets a known, reviewed uv rather than whatever is latest the day a
-// candidate runs it. Only affects machines without uv already on PATH. Bump periodically.
-const UV_VERSION = "0.11.21";
+import { onPath, resolveBin, runTestsCapture, runCaptured, step, managedBinDir } from "./shared.js";
+import { installTool } from "./install.js";
 
 async function ensureUv(): Promise<void> {
-  if (await onPath("uv")) return;
-  await installScript(`https://astral.sh/uv/${UV_VERSION}/install.sh`);
+  await installTool("uv");
   if (!(await onPath("uv"))) {
-    throw new Error("uv install completed but uv is still not on PATH (~/.local/bin).");
+    throw new Error(`uv install completed but uv is still not runnable (${managedBinDir()}).`);
   }
 }
 

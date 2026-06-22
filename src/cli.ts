@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { CLI_VERSION } from "./version.js";
 import { chatCommand } from "./commands/chat.js";
 import { devCommand } from "./commands/dev.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { recordCommand } from "./commands/record.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
@@ -70,6 +71,13 @@ async function main(): Promise<void> {
     .description("Attach AI chat logs (Claude Code, Codex, Cursor) from this session")
     .action(async () => {
       await chatCommand();
+    });
+
+  program
+    .command("doctor")
+    .description("Check your environment (Git, Node, write access) and report what's wrong")
+    .action(async () => {
+      await doctorCommand();
     });
 
   // Internal: the background timeline recorder, spawned detached by `start`. Not for direct use.

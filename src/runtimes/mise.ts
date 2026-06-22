@@ -1,17 +1,12 @@
 import type { Lang } from "../session.js";
 import type { Runtime, TestResult } from "./types.js";
-import { onPath, resolveBin, runTestsCapture, installScript, runCaptured, step, LANG_LABEL } from "./shared.js";
-
-// Pinned so a fresh install gets a known, reviewed mise rather than whatever is latest the day a
-// candidate runs it. The mise.run script honors MISE_VERSION. Only affects machines without mise
-// already on PATH. Bump periodically.
-const MISE_VERSION = "v2026.6.10";
+import { resolveBin, runTestsCapture, runCaptured, step, LANG_LABEL, managedBinDir, onPath } from "./shared.js";
+import { installTool } from "./install.js";
 
 export async function ensureMise(): Promise<void> {
-  if (await onPath("mise")) return;
-  await installScript("https://mise.run", { MISE_VERSION });
+  await installTool("mise");
   if (!(await onPath("mise"))) {
-    throw new Error("mise install completed but mise is still not on PATH (~/.local/bin).");
+    throw new Error(`mise install completed but mise is still not runnable (${managedBinDir()}).`);
   }
 }
 
@@ -21,7 +16,11 @@ export async function ensureMise(): Promise<void> {
 // and test commands.
 export function createMiseRuntime(
   lang: Lang,
-  opts: { install?: string[]; test: string[]; dev: string[] | ((repoDir: string) => string[]) },
+  opts: {
+    install?: string[];
+    test: string[] | ((repoDir: string) => string[]);
+    dev: string[] | ((repoDir: string) => string[]);
+  },
 ): Runtime {
   return {
     lang,
@@ -41,7 +40,8 @@ export function createMiseRuntime(
       }
     },
     async runTests(repoDir: string, timeoutMs?: number): Promise<TestResult> {
-      return runTestsCapture(resolveBin("mise"), ["exec", "--", ...opts.test], repoDir, timeoutMs);
+      const test = typeof opts.test === "function" ? opts.test(repoDir) : opts.test;
+      return runTestsCapture(resolveBin("mise"), ["exec", "--", ...test], repoDir, timeoutMs);
     },
     devCommand(repoDir: string) {
       const dev = typeof opts.dev === "function" ? opts.dev(repoDir) : opts.dev;

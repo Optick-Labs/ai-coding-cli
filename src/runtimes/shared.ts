@@ -1,10 +1,13 @@
 import { execa, type ExecaError } from "execa";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import chalk from "chalk";
 import type { Lang } from "../session.js";
 import type { TestResult } from "./types.js";
+import { envWithManagedBin } from "./install.js";
+import { mvnwPathFor } from "./platform.js";
+
+// The cross-platform toolchain path helpers live in install.ts (next to the installer that populates the
+// managed bin dir). Re-exported here so the runtimes keep importing them from one place.
+export { managedBinDir, onPath, resolveBin } from "./install.js";
 
 let VERBOSE = false;
 export function setVerbose(value: boolean): void {
@@ -23,50 +26,30 @@ export const LANG_LABEL: Record<Lang, string> = {
   any: "Any language",
 };
 
-export function localBinDir(): string {
-  return join(homedir(), ".local", "bin");
-}
-
-export async function onPath(binary: string): Promise<boolean> {
-  try {
-    await execa("which", [binary]);
-    return true;
-  } catch {
-    return existsSync(join(localBinDir(), binary));
-  }
-}
-
-export function resolveBin(binary: string): string {
-  const local = join(localBinDir(), binary);
-  if (existsSync(local)) return local;
-  return binary;
-}
-
-function envWithLocalBin(): NodeJS.ProcessEnv {
-  const local = localBinDir();
-  // Strip the session token before handing the env to any subprocess: provisioning/test commands run
-  // untrusted seed code, and the piped `curl | sh` installers run third-party scripts. None of them
-  // have any business seeing the bearer token. `--token`/`--token-stdin` never reach the environment;
-  // `HI_TOKEN` does, so drop it here so it can't be read (or exfiltrated) by a child.
-  const env = { ...process.env };
-  delete env.HI_TOKEN;
-  const existing = env.PATH ?? "";
-  env.PATH = existing.includes(local) ? existing : `${local}:${existing}`;
-  return env;
+// The Maven wrapper ships as a POSIX shell script (`mvnw`) and a Windows batch file (`mvnw.cmd`); both
+// live in the seed. Resolve the right one as an explicit absolute path in the repo so what we invoke is
+// obvious from the call site (rather than relying on cross-spawn's cwd resolution).
+export function mvnwPath(repoDir: string): string {
+  return mvnwPathFor(process.platform, repoDir);
 }
 
 // Carries the captured output of a failed command so a step can surface it for debugging.
 export class RunError extends Error {
   readonly output: string;
   readonly exitCode: number | null;
+  // The signal that killed the command, if any (e.g. "SIGKILL"). Null on a normal non-zero exit. A
+  // SIGKILL during provisioning is the macOS endpoint-security failure mode, so carrying it makes that
+  // class legible in the message and in start telemetry instead of surfacing as "exited with code unknown".
+  readonly signal: string | null;
   // The command that failed (e.g. `uv sync`). Carried so start telemetry can point at the exact step
   // that broke, which is almost always a provisioning command.
   readonly command: string;
-  constructor(output: string, exitCode: number | null, command: string) {
-    super(`command exited with code ${exitCode ?? "unknown"}`);
+  constructor(output: string, exitCode: number | null, command: string, signal: string | null = null) {
+    super(signal ? `command was killed by ${signal}` : `command exited with code ${exitCode ?? "unknown"}`);
     this.name = "RunError";
     this.output = output;
     this.exitCode = exitCode;
+    this.signal = signal;
     this.command = command;
   }
 }
@@ -81,22 +64,23 @@ export async function runCaptured(
   cwd: string,
   envOverrides?: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const env = { ...envWithLocalBin(), ...envOverrides };
+  const env = { ...envWithManagedBin(), ...envOverrides };
+  const commandLine = `${command} ${args.join(" ")}`.trim();
   if (isVerbose()) {
-    await execa(command, args, { cwd, stdio: "inherit", env });
+    // Streamed to the user, but still convert a failure to a RunError so the signal (e.g. SIGKILL) and
+    // its dedicated UX survive --verbose. Output isn't captured here — the user already saw it live.
+    try {
+      await execa(command, args, { cwd, stdio: "inherit", env });
+    } catch (error) {
+      const e = error as ExecaError;
+      throw new RunError("", e.exitCode ?? null, commandLine, e.signal ?? null);
+    }
     return;
   }
   const result = await execa(command, args, { cwd, all: true, reject: false, env });
-  if (result.exitCode !== 0) {
-    throw new RunError(result.all ?? "", result.exitCode ?? null, `${command} ${args.join(" ")}`.trim());
+  if (result.exitCode !== 0 || result.signal) {
+    throw new RunError(result.all ?? "", result.exitCode ?? null, commandLine, result.signal ?? null);
   }
-}
-
-// Bootstrap a toolchain manager (uv / mise) by piping its official install script into sh. Captured
-// like any other step unless --verbose. `envOverrides` reaches the piped sh, so an installer that
-// reads a version env var (mise.run honors MISE_VERSION) gets a pinned version instead of latest.
-export async function installScript(scriptUrl: string, envOverrides?: NodeJS.ProcessEnv): Promise<void> {
-  await runCaptured("sh", ["-c", `curl -LsSf ${scriptUrl} | sh`], process.cwd(), envOverrides);
 }
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -157,6 +141,18 @@ export async function step<T>(label: string, fn: () => Promise<T>): Promise<T> {
     if (error instanceof RunError && error.output.trim().length > 0) {
       process.stdout.write("\n" + chalk.dim(error.output.trim()) + "\n\n");
     }
+    if (error instanceof RunError && error.signal === "SIGKILL") {
+      process.stdout.write(
+        chalk.yellow(
+          "\nThat setup step was killed by the system (SIGKILL). This is usually endpoint-security software,\n" +
+            "antivirus, or macOS Gatekeeper interfering with a freshly downloaded tool — not a bug in the tool.\n",
+        ) +
+          chalk.dim(
+            "  Try re-running the command. If it keeps happening, allowlist the toolchain (or ask IT), then retry.\n" +
+              "  Re-run with --verbose for the full log.\n\n",
+          ),
+      );
+    }
     throw error;
   }
 }
@@ -174,7 +170,7 @@ export function spawnStreaming(
     cwd,
     stdio: "inherit",
     reject: false,
-    env: { ...envWithLocalBin(), ...envOverrides },
+    env: { ...envWithManagedBin(), ...envOverrides },
   });
 }
 
@@ -193,7 +189,7 @@ export async function runTestsCapture(
     const result = await execa(command, args, {
       cwd,
       all: true,
-      env: envWithLocalBin(),
+      env: envWithManagedBin(),
       reject: false,
       timeout: timeoutMs,
     });

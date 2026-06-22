@@ -7,10 +7,12 @@ import chalk from "chalk";
 import { apiBaseUrl, downloadBundle, fetchSeedUrl, fetchSession, startSessionClock } from "../api.js";
 import { resolveSeed } from "../seeds.js";
 import { getRuntime, setVerbose, isVerbose, startSpinner, LANG_LABEL, type Runtime } from "../runtimes/index.js";
+import { managedBinDir } from "../runtimes/install.js";
 import { clone, headSha } from "../git.js";
 import { writeSession, recorderPidPath, LANGS, type Lang, type Session } from "../session.js";
 import { addSession } from "../registry.js";
 import { StartTelemetry, LOCAL_LOG_NAME, namedError } from "./start-telemetry.js";
+import { preflightGeneric, preflightRuntime } from "../preflight.js";
 
 // Offline mode has no server session to read a budget from, so it falls back to this. The online
 // (token) path always uses the server-issued deadline instead, which carries the task's own duration.
@@ -167,6 +169,7 @@ export async function startCommand(taskArg: string | undefined, options: StartOp
   // a debug breadcrumb on a hard failure, which is handy while iterating on seeds.
   const telemetry = new StartTelemetry({});
   try {
+    await telemetry.phase("PREFLIGHT", preflightGeneric);
     const { repoDir, dirName, baselineSha, baseline } = await bootstrap({ task: taskArg, lang, source }, telemetry);
 
     const deadlineMinutes = resolveOfflineDeadlineMinutes(options.minutes);
@@ -203,6 +206,7 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
   let tempSeedDir: string | undefined;
 
   try {
+    await telemetry.phase("PREFLIGHT", preflightGeneric);
     console.log(chalk.cyan("Resolving session from hellointerview.com..."));
     const remote = await telemetry.phase("RESOLVE_SESSION", () => fetchSession(base, token));
     const lang = assertLang(remote.language);
@@ -317,11 +321,13 @@ async function bootstrap(
     return { repoDir, dirName, baselineSha };
   }
 
+  await telemetry.phase("PREFLIGHT", () => preflightRuntime({ selfDirected: runtime.selfDirected }));
+
   const label = LANG_LABEL[lang];
   console.log(chalk.cyan(`\nSetting up your ${label} environment (one-time, ~30–60s the first time)…`));
   console.log(
     chalk.dim(
-      `  Installs an isolated toolchain under ~/.local. It won't change your system ${label} or global PATH.`,
+      `  Installs an isolated toolchain under ${managedBinDir()}. It won't change your system ${label} or global PATH.`,
     ),
   );
   console.log(chalk.dim("  Re-run with --verbose to see everything.\n"));

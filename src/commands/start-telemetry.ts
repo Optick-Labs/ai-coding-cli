@@ -18,9 +18,13 @@ export function telemetryDisabled(): boolean {
   return process.env.HI_TELEMETRY === "0" || process.env.DO_NOT_TRACK === "1";
 }
 
-// One-time marker so the telemetry notice shows once per machine, not every run.
+// One-time marker so the telemetry notice shows once per machine, not every run. Uses the native
+// per-user config dir on each OS: %APPDATA% on Windows, $XDG_CONFIG_HOME (or ~/.config) elsewhere.
 function telemetryAckPath(): string {
-  const base = process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
+  const base =
+    process.platform === "win32"
+      ? process.env.APPDATA?.trim() || join(homedir(), "AppData", "Roaming")
+      : process.env.XDG_CONFIG_HOME?.trim() || join(homedir(), ".config");
   return join(base, "hellointerview-ai-coding", "telemetry-ack");
 }
 
@@ -83,13 +87,14 @@ interface RunErrorLike {
   message: string;
   output?: string;
   exitCode?: number | null;
+  signal?: string | null;
   command?: string;
   status?: number;
 }
 
 type ErrorFields = Pick<
   ByoeStartDiagnosticPayload,
-  "errorKind" | "errorMessage" | "errorCommand" | "exitCode" | "outputTail"
+  "errorKind" | "errorMessage" | "errorCommand" | "exitCode" | "signal" | "outputTail"
 >;
 
 // Tracks how far `start` got and how long each phase took, then reports the outcome exactly once.
@@ -98,7 +103,9 @@ type ErrorFields = Pick<
 // `failure` exactly once at the end.
 export class StartTelemetry {
   private timings: Record<string, number> = {};
-  private furthest: ByoeStartPhase = "RESOLVE_SESSION";
+  // Defaults to the first phase so a crash before any phase() call is attributed to PREFLIGHT, not a
+  // later phase we never reached.
+  private furthest: ByoeStartPhase = "PREFLIGHT";
   private readonly online: boolean;
 
   constructor(private readonly opts: { token?: string; apiBaseUrl?: string }) {
@@ -133,7 +140,11 @@ export class StartTelemetry {
     try {
       return await fn();
     } finally {
-      this.timings[phase.toLowerCase()] = Date.now() - startedAt;
+      // Accumulate, don't overwrite: a phase can legitimately run more than once (PREFLIGHT runs both
+      // before session resolution and again, runtime-specific, before provisioning), and durationMs is
+      // the sum of these — overwriting would drop the earlier pass and understate the total.
+      const key = phase.toLowerCase();
+      this.timings[key] = (this.timings[key] ?? 0) + (Date.now() - startedAt);
     }
   }
 
@@ -155,6 +166,7 @@ export class StartTelemetry {
       errorMessage: "seed baseline tests failed at start",
       errorCommand: null,
       exitCode: null,
+      signal: null,
       outputTail: output.trim() ? redact(output, this.opts.token).slice(-MAX_OUTPUT_TAIL) : null,
       ...this.base(),
     });
@@ -194,6 +206,7 @@ export class StartTelemetry {
         errorMessage: redact(e.message, this.opts.token).slice(0, MAX_ERROR_MESSAGE),
         errorCommand: e.command ? redact(e.command, this.opts.token).slice(0, 200) : null,
         exitCode: typeof e.exitCode === "number" ? e.exitCode : null,
+        signal: typeof e.signal === "string" ? e.signal : null,
         outputTail: isRunError && e.output ? redact(e.output, this.opts.token).slice(-MAX_OUTPUT_TAIL) : null,
       };
     }
@@ -202,6 +215,7 @@ export class StartTelemetry {
       errorMessage: redact(String(error), this.opts.token).slice(0, MAX_ERROR_MESSAGE),
       errorCommand: null,
       exitCode: null,
+      signal: null,
       outputTail: null,
     };
   }
@@ -228,6 +242,7 @@ export class StartTelemetry {
       `cli: ${payload.cliVersion}  node: ${payload.nodeVersion}  os: ${payload.os} ${payload.arch}`,
       payload.errorCommand ? `command: ${payload.errorCommand}` : null,
       payload.exitCode !== null && payload.exitCode !== undefined ? `exitCode: ${payload.exitCode}` : null,
+      payload.signal ? `signal: ${payload.signal}` : null,
       `error: ${payload.errorMessage ?? "(none)"}`,
       payload.outputTail ? `--- output tail ---\n${payload.outputTail}` : null,
       "",

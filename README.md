@@ -2,7 +2,21 @@
 
 The local CLI for Hello Interview coding practice. It clones your session's starter repo, sets up the runtime, runs a timed session, and bundles your work for submission. Everything runs on your own machine.
 
-Requires **Node.js 22+**. No install needed — run it with `npx`.
+No install needed — run it with `npx`.
+
+## Requirements
+
+- **Node.js 22+**
+- **Git** (used to clone your starter repo and snapshot your work) — install from [git-scm.com](https://git-scm.com/downloads)
+- **OS:** macOS, Linux, or Windows 10/11 (x64 or arm64)
+
+Not sure your machine is ready? Run the built-in check:
+
+```
+npx @hellointerview/ai-coding doctor
+```
+
+It reports whether Git and a supported Node are present and whether the CLI can write where it needs to — handy if a session won't start.
 
 ## Usage
 
@@ -48,7 +62,7 @@ Everything happens locally on your machine. A few things are worth calling out e
 - **Session token storage.** Your session token is never written into the exercise repo (which holds code you run). It's stored under your own config dir — `$XDG_CONFIG_HOME/hellointerview-ai-coding/credentials/` (or `~/.config/...`) — in an owner-only (`0600`) file, keyed to the session folder. The repo's `.hi/session.json` holds only non-secret task metadata.
 - **AI chat capture (you choose).** `submit` (and the standalone `chat` command) look for Claude Code and Codex session logs that belong to this repo — under `~/.claude/projects` and `~/.codex/sessions`, matched by the working directory recorded in each log — and let you pick which, if any, to upload to your grader. Nothing uploads without your selection. Override the search roots with `CLAUDE_CONFIG_DIR` / `CODEX_HOME`.
 - **Background recorder.** `start` spawns a detached helper that snapshots your progress every 2 minutes so your debrief can reference how you built things. It writes only to a private `refs/hi/timeline` ref and the gitignored `.hi/` folder — never your HEAD, branch, or staged changes. It stops when you `submit` and self-terminates after the deadline.
-- **Toolchain install.** For a managed-runtime task, if `uv` (Python) or `mise` (other languages) isn't already installed, `start` runs that tool's official install script (pinned to a known version) into an isolated location under `~/.local`. It won't change your system runtime or global PATH. Tools you already have installed are reused as-is.
+- **Toolchain install.** For a managed-runtime task, `start` needs `uv` (Python) or `mise` (other languages). If you already have a recent-enough one installed, it's reused as-is. Otherwise the CLI downloads the official release binary for your OS — pinned to an exact version and **verified against a SHA-256 checksum** before it runs — and unpacks it into a private, CLI-owned directory (`~/.local/share/hello-interview/bin` on macOS/Linux, `%LOCALAPPDATA%\hello-interview\bin` on Windows). It's deliberately not a shared location like `~/.local/bin`, so it can never alias or overwrite a `mise`/`uv` you installed yourself. It only goes on PATH for the CLI's own subprocesses — never your system runtime or global PATH. There is no `curl | sh`: the exact versions and checksums are committed in [`src/runtimes/toolchain-manifest.ts`](src/runtimes/toolchain-manifest.ts), and extraction happens in-process (no shelling out to `tar`/`unzip`), so what runs is fully auditable. mise/uv then install the actual language toolchain (the JDK, Node, Go, .NET, or Python the task pins).
 
 ## Local development (run `ai-coding` from anywhere)
 
