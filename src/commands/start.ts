@@ -252,6 +252,7 @@ async function startOnline(token: string, seedOverride?: string): Promise<void> 
           token,
           apiBaseUrl: base,
         },
+        cockpitUrl: `${base}/practice/ai-coding/byoe/${remote.id}`,
       }),
     );
 
@@ -410,8 +411,13 @@ function spawnRecorder(repoDir: string): boolean {
   }
 }
 
-async function finalize(args: { repoDir: string; dirName: string; session: Session }): Promise<void> {
-  const { repoDir, dirName, session } = args;
+async function finalize(args: {
+  repoDir: string;
+  dirName: string;
+  session: Session;
+  cockpitUrl?: string;
+}): Promise<void> {
+  const { repoDir, dirName, session, cockpitUrl } = args;
   await writeSession(repoDir, session);
   // Record the session's location (non-secret locators only) so a later command run from the wrong
   // folder can point the candidate back here. Best-effort — never blocks start.
@@ -442,6 +448,10 @@ async function finalize(args: { repoDir: string; dirName: string; session: Sessi
   console.log(chalk.cyan("\nNext steps:"));
   console.log(`  ${chalk.bold(`cd ${dirName}`)}`);
   console.log(`  ${chalk.dim("Open the README in your editor and read the task brief.")}`);
+  if (cockpitUrl) {
+    console.log(`  ${chalk.dim("Stuck on scope? Ask your interviewer clarifying questions here:")}`);
+    console.log(`    ${chalk.cyan(cockpitUrl)}`);
+  }
   if (getRuntime(session.lang).selfDirected) {
     console.log(
       `  ${chalk.dim("Then start building — in any language, with your own test/dev tools.")}`,

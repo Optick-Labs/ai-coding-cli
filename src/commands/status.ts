@@ -31,6 +31,9 @@ export async function statusCommand(): Promise<void> {
   const { session, hiDir, repoDir } = await findSession(process.cwd(), { command: "status" });
 
   let remaining: { overTime: boolean; label: string };
+  // The interviewer chat lives in the cockpit and only accepts questions while the session is ACTIVE,
+  // so we only surface its link when the server confirms the session is still live.
+  let interviewerChatUrl: string | undefined;
   if (session.token && session.apiBaseUrl) {
     try {
       const remote = await fetchSession(session.apiBaseUrl, session.token);
@@ -38,6 +41,9 @@ export async function statusCommand(): Promise<void> {
         remote.remainingSeconds === null
           ? computeRemaining(session.deadline, session.startedAt, new Date())
           : labelFromSeconds(remote.remainingSeconds);
+      if (remote.status === "ACTIVE") {
+        interviewerChatUrl = `${session.apiBaseUrl}/practice/ai-coding/byoe/${remote.id}`;
+      }
     } catch {
       console.log(chalk.dim("(could not reach server; showing local time)"));
       remaining = computeRemaining(session.deadline, session.startedAt, new Date());
@@ -54,6 +60,9 @@ export async function statusCommand(): Promise<void> {
   }
   if (session.submittedAt) {
     console.log(chalk.dim(`Submitted at ${session.submittedAt}`));
+  }
+  if (interviewerChatUrl) {
+    console.log(chalk.dim(`Ask your interviewer clarifying questions: ${chalk.cyan(interviewerChatUrl)}`));
   }
 
   const recorder = await recorderStatus(hiDir);
